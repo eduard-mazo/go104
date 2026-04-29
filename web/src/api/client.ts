@@ -36,6 +36,7 @@ export interface Signal {
   scale: number
   offset: number
   description: string
+  line_name?: string  // populated by /api/signals/all
 }
 
 export interface Datapoint {
@@ -102,6 +103,61 @@ export const monitorAPI = {
 
 export const commandsAPI = {
   send: (cmd: Command) => http.post('/commands', cmd).then(r => r.data),
+}
+
+// ── SCADA types ────────────────────────────────────────────────────────────
+
+export interface ValveConfig {
+  color_on:    string
+  color_off:   string
+  color_fault: string
+  label:       string
+}
+
+export interface PctBarConfig {
+  min:        number
+  max:        number
+  color_fill: string
+  color_bg:   string
+  unit:       string
+  label:      string
+  vertical:   boolean
+}
+
+export type ElementKind = 'valve' | 'pct_bar'
+
+export interface ScadaElement {
+  id:        string         // crypto.randomUUID()
+  kind:      ElementKind
+  x:         number
+  y:         number
+  w:         number
+  h:         number
+  rotation:  0 | 90 | 180 | 270
+  signal_id: number | null
+  config:    ValveConfig | PctBarConfig
+}
+
+export interface ScadaView {
+  id:         number
+  name:       string
+  width:      number
+  height:     number
+  elements:   ScadaElement[]
+  updated_at: string
+}
+
+export const scadaAPI = {
+  list:   ()                      => http.get<ScadaView[]>('/scada/views').then(r => r.data),
+  get:    (id: number)            => http.get<ScadaView>(`/scada/views/${id}`).then(r => r.data),
+  create: (v: Partial<ScadaView>) => http.post<ScadaView>('/scada/views', v).then(r => r.data),
+  update: (id: number, v: Partial<ScadaView>) =>
+    http.put<ScadaView>(`/scada/views/${id}`, v).then(r => r.data),
+  remove: (id: number)            => http.delete(`/scada/views/${id}`).then(r => r.data),
+}
+
+export const allSignalsAPI = {
+  list: () => http.get<Signal[]>('/signals/all').then(r => r.data),
 }
 
 // ── TYPE ID catalogue ──────────────────────────────────────────────────────

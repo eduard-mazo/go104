@@ -55,6 +55,16 @@ func (h *Handlers) Router() http.Handler {
 
 		// Commands
 		r.Post("/commands", h.sendCommand)
+
+		// All signals (for SCADA signal picker)
+		r.Get("/signals/all", h.listAllSignals)
+
+		// SCADA views
+		r.Get("/scada/views", h.listScadaViews)
+		r.Post("/scada/views", h.createScadaView)
+		r.Get("/scada/views/{id}", h.getScadaView)
+		r.Put("/scada/views/{id}", h.updateScadaView)
+		r.Delete("/scada/views/{id}", h.deleteScadaView)
 	})
 
 	// WebSocket

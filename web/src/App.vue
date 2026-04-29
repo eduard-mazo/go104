@@ -3,17 +3,18 @@ import { onMounted, onUnmounted } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useMonitorStore } from '@/stores/monitor'
 import {
-  Plug, Radio, Activity, Terminal, Zap
+  Plug, Radio, Activity, Terminal, Zap, LayoutDashboard
 } from 'lucide-vue-next'
 
 const monitor = useMonitorStore()
 const route = useRoute()
 
 const nav = [
-  { to: '/lines',    label: 'Lines',    icon: Plug     },
-  { to: '/signals',  label: 'Signals',  icon: Radio    },
-  { to: '/monitor',  label: 'Monitor',  icon: Activity },
-  { to: '/commands', label: 'Commands', icon: Terminal  },
+  { to: '/lines',    label: 'Lines',    icon: Plug            },
+  { to: '/signals',  label: 'Signals',  icon: Radio           },
+  { to: '/monitor',  label: 'Monitor',  icon: Activity        },
+  { to: '/commands', label: 'Commands', icon: Terminal        },
+  { to: '/scada',    label: 'SCADA',    icon: LayoutDashboard },
 ]
 
 onMounted(() => monitor.connect())
@@ -54,7 +55,7 @@ onUnmounted(() => monitor.disconnect())
           :key="item.to"
           :to="item.to"
           class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-          :class="route.path === item.to
+          :class="route.path.startsWith(item.to) && item.to !== '/'
             ? 'bg-blue-600 text-white'
             : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'"
         >

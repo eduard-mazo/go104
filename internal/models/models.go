@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type LineState string
 
@@ -51,6 +54,7 @@ type Signal struct {
 	Scale       float64    `json:"scale"`
 	Offset      float64    `json:"offset"`
 	Description string     `json:"description"`
+	LineName    string     `json:"line_name,omitempty"` // populated by ListAllSignals
 }
 
 type Datapoint struct {
@@ -71,6 +75,20 @@ type Datapoint struct {
 // QualityOK returns true when IV and BL bits are clear.
 func (d *Datapoint) QualityOK() bool {
 	return d.Quality&0x80 == 0 && d.Quality&0x10 == 0
+}
+
+// Signal includes an optional LineName populated by ListAllSignals.
+// The field is omitted from normal per-line queries.
+
+// ScadaView is a named P&ID diagram stored as a JSON layout.
+type ScadaView struct {
+	ID        int64           `json:"id"`
+	Name      string          `json:"name"`
+	Width     int             `json:"width"`
+	Height    int             `json:"height"`
+	Elements  json.RawMessage `json:"elements"` // []ScadaElement JSON, stored as TEXT in SQLite
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 type Command struct {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -27,6 +28,14 @@ type Store interface {
 
 	UpsertDatapoint(dp *models.Datapoint) error
 	ListDatapoints(lineID int64) ([]models.Datapoint, error)
+
+	ListAllSignals() ([]models.Signal, error)
+
+	ListScadaViews() ([]models.ScadaView, error)
+	GetScadaView(id int64) (*models.ScadaView, error)
+	CreateScadaView(v *models.ScadaView) error
+	UpdateScadaView(v *models.ScadaView) error
+	DeleteScadaView(id int64) error
 
 	Close() error
 }
@@ -100,6 +109,15 @@ func (s *sqliteStore) migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_signals_line ON signals(line_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_datapoints_line ON datapoints(line_id)`,
+		`CREATE TABLE IF NOT EXISTS scada_views (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			name       TEXT    NOT NULL,
+			width      INTEGER NOT NULL DEFAULT 1400,
+			height     INTEGER NOT NULL DEFAULT 900,
+			elements   TEXT    NOT NULL DEFAULT '[]',
+			created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+		)`,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -342,6 +360,105 @@ func (s *sqliteStore) ListDatapoints(lineID int64) ([]models.Datapoint, error) {
 		}
 	}
 	return result, nil
+}
+
+// --- All signals (for SCADA signal picker) ---
+
+func (s *sqliteStore) ListAllSignals() ([]models.Signal, error) {
+	rows, err := s.db.Query(`SELECT s.id,s.line_id,s.name,s.ioa,s.type_id,s.signal_type,
+		s.unit,s.scale,s.offset_val,s.description,l.name
+		FROM signals s JOIN lines l ON l.id=s.line_id
+		ORDER BY l.name, s.ioa`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sigs []models.Signal
+	for rows.Next() {
+		var sig models.Signal
+		var kind string
+		if err := rows.Scan(&sig.ID, &sig.LineID, &sig.Name, &sig.IOA, &sig.TypeID,
+			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description, &sig.LineName); err != nil {
+			return nil, err
+		}
+		sig.Kind = models.SignalKind(kind)
+		sigs = append(sigs, sig)
+	}
+	return sigs, rows.Err()
+}
+
+// --- SCADA views ---
+
+func (s *sqliteStore) ListScadaViews() ([]models.ScadaView, error) {
+	rows, err := s.db.Query(`SELECT id,name,width,height,updated_at FROM scada_views ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var views []models.ScadaView
+	for rows.Next() {
+		var v models.ScadaView
+		var updated string
+		if err := rows.Scan(&v.ID, &v.Name, &v.Width, &v.Height, &updated); err != nil {
+			return nil, err
+		}
+		v.Elements = json.RawMessage("[]")
+		v.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+		views = append(views, v)
+	}
+	return views, rows.Err()
+}
+
+func (s *sqliteStore) GetScadaView(id int64) (*models.ScadaView, error) {
+	v := &models.ScadaView{}
+	var created, updated, elements string
+	err := s.db.QueryRow(`SELECT id,name,width,height,elements,created_at,updated_at FROM scada_views WHERE id=?`, id).
+		Scan(&v.ID, &v.Name, &v.Width, &v.Height, &elements, &created, &updated)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v.Elements = json.RawMessage(elements)
+	v.CreatedAt, _ = time.Parse(time.RFC3339, created)
+	v.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+	return v, nil
+}
+
+func (s *sqliteStore) CreateScadaView(v *models.ScadaView) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	elements := string(v.Elements)
+	if elements == "" {
+		elements = "[]"
+	}
+	res, err := s.db.Exec(`INSERT INTO scada_views (name,width,height,elements) VALUES (?,?,?,?)`,
+		v.Name, v.Width, v.Height, elements)
+	if err != nil {
+		return err
+	}
+	v.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *sqliteStore) UpdateScadaView(v *models.ScadaView) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	elements := string(v.Elements)
+	if elements == "" {
+		elements = "[]"
+	}
+	_, err := s.db.Exec(`UPDATE scada_views SET name=?,width=?,height=?,elements=?,updated_at=datetime('now') WHERE id=?`,
+		v.Name, v.Width, v.Height, elements, v.ID)
+	return err
+}
+
+func (s *sqliteStore) DeleteScadaView(id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM scada_views WHERE id=?`, id)
+	return err
 }
 
 func (s *sqliteStore) Close() error {
