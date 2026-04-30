@@ -59,6 +59,9 @@ func (h *Handlers) Router() http.Handler {
 		// All signals (for SCADA signal picker)
 		r.Get("/signals/all", h.listAllSignals)
 
+		// Signal history (time-series for chart modal)
+		r.Get("/signals/{id}/history", h.getSignalHistory)
+
 		// SCADA views
 		r.Get("/scada/views", h.listScadaViews)
 		r.Post("/scada/views", h.createScadaView)

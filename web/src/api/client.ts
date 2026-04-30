@@ -124,7 +124,30 @@ export interface PctBarConfig {
   vertical:   boolean
 }
 
-export type ElementKind = 'valve' | 'pct_bar'
+// Shared config for analog gauge elements (tank, flow meter, pressure gauge, transformer)
+export interface GaugeConfig {
+  min:         number
+  max:         number
+  color_fill:  string
+  color_alarm: string
+  alarm_high:  number   // alarm when value >= alarm_high (0 = disabled)
+  unit:        string
+  label:       string
+}
+
+export type ElementKind =
+  | 'valve'            // gate valve (digital)
+  | 'pct_bar'          // percentage bar (analog)
+  | 'circuit_breaker'  // electrical circuit breaker (digital)
+  | 'motor'            // electric motor (digital)
+  | 'transformer'      // transformer/load (analog)
+  | 'indicator_lamp'   // indicator lamp (digital)
+  | 'ball_valve'       // ball valve (digital)
+  | 'pump'             // centrifugal pump (digital)
+  | 'tank'             // storage tank with level (analog)
+  | 'flow_meter'       // flow meter (analog)
+  | 'pressure_gauge'   // pressure gauge (analog)
+  | 'compressor'       // gas compressor (digital)
 
 export interface ScadaElement {
   id:        string         // crypto.randomUUID()
@@ -135,7 +158,21 @@ export interface ScadaElement {
   h:         number
   rotation:  0 | 90 | 180 | 270
   signal_id: number | null
-  config:    ValveConfig | PctBarConfig
+  config:    ValveConfig | PctBarConfig | GaugeConfig
+}
+
+export type ScadaLineStyle = 'pipe_water' | 'pipe_gas' | 'wire' | 'cable'
+
+export interface ScadaLine {
+  id:           string
+  from_el:      string | null  // element id (null = free endpoint)
+  to_el:        string | null
+  from_pt:      { x: number; y: number }  // canvas-absolute coords
+  to_pt:        { x: number; y: number }
+  style:        ScadaLineStyle
+  color:        string
+  stroke_width: number
+  label:        string
 }
 
 export interface ScadaView {
@@ -144,6 +181,7 @@ export interface ScadaView {
   width:      number
   height:     number
   elements:   ScadaElement[]
+  lines:      ScadaLine[]
   updated_at: string
 }
 
@@ -158,6 +196,19 @@ export const scadaAPI = {
 
 export const allSignalsAPI = {
   list: () => http.get<Signal[]>('/signals/all').then(r => r.data),
+}
+
+export interface HistoryPoint {
+  ts:      number   // Unix epoch seconds (float)
+  value:   number
+  quality: number
+}
+
+export const signalHistoryAPI = {
+  query: (signalId: number, from: number, to: number, limit = 2000) =>
+    http.get<HistoryPoint[]>(`/signals/${signalId}/history`, {
+      params: { from, to, limit },
+    }).then(r => r.data),
 }
 
 // ── TYPE ID catalogue ──────────────────────────────────────────────────────

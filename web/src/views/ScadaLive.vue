@@ -5,8 +5,20 @@ import { useScadaStore } from '@/stores/scada'
 import { useMonitorStore } from '@/stores/monitor'
 import { allSignalsAPI, commandsAPI, type ScadaElement, type Signal, type ValveConfig } from '@/api/client'
 import ContextMenu, { type MenuItem } from '@/components/scada/ContextMenu.vue'
-import ValveSVG from '@/components/scada/elements/ValveSVG.vue'
-import PctBar from '@/components/scada/elements/PctBar.vue'
+import ConnectionLayer from '@/components/scada/ConnectionLayer.vue'
+import HistoryModal from '@/components/scada/HistoryModal.vue'
+import ValveSVG       from '@/components/scada/elements/ValveSVG.vue'
+import PctBar         from '@/components/scada/elements/PctBar.vue'
+import CircuitBreaker from '@/components/scada/elements/CircuitBreaker.vue'
+import Motor          from '@/components/scada/elements/Motor.vue'
+import Transformer    from '@/components/scada/elements/Transformer.vue'
+import IndicatorLamp  from '@/components/scada/elements/IndicatorLamp.vue'
+import BallValve      from '@/components/scada/elements/BallValve.vue'
+import Pump           from '@/components/scada/elements/Pump.vue'
+import Tank           from '@/components/scada/elements/Tank.vue'
+import FlowMeter      from '@/components/scada/elements/FlowMeter.vue'
+import PressureGauge  from '@/components/scada/elements/PressureGauge.vue'
+import Compressor     from '@/components/scada/elements/Compressor.vue'
 import { ArrowLeft, Pencil } from 'lucide-vue-next'
 
 const route   = useRoute()
@@ -14,9 +26,9 @@ const router  = useRouter()
 const store   = useScadaStore()
 const monitor = useMonitorStore()
 
-const allSignals = ref<Signal[]>([])
-const ctxMenu    = ref<{ x: number; y: number; items: MenuItem[] } | null>(null)
-const setpoint   = ref(0)
+const allSignals    = ref<Signal[]>([])
+const ctxMenu       = ref<{ x: number; y: number; items: MenuItem[] } | null>(null)
+const historySignal = ref<number | null>(null)
 
 const viewId = Number(route.params.id)
 
@@ -28,7 +40,6 @@ onMounted(async () => {
 const view     = computed(() => store.activeView)
 const elements = computed(() => view.value?.elements ?? [])
 
-// signal_id → Signal lookup map
 const signalMap = computed(() => {
   const m = new Map<number, Signal>()
   for (const s of allSignals.value) m.set(s.id, s)
@@ -36,8 +47,18 @@ const signalMap = computed(() => {
 })
 
 const ELEMENT_COMPONENTS: Record<string, any> = {
-  valve:   markRaw(ValveSVG),
-  pct_bar: markRaw(PctBar),
+  valve:           markRaw(ValveSVG),
+  pct_bar:         markRaw(PctBar),
+  circuit_breaker: markRaw(CircuitBreaker),
+  motor:           markRaw(Motor),
+  transformer:     markRaw(Transformer),
+  indicator_lamp:  markRaw(IndicatorLamp),
+  ball_valve:      markRaw(BallValve),
+  pump:            markRaw(Pump),
+  tank:            markRaw(Tank),
+  flow_meter:      markRaw(FlowMeter),
+  pressure_gauge:  markRaw(PressureGauge),
+  compressor:      markRaw(Compressor),
 }
 function elementComp(kind: string) { return ELEMENT_COMPONENTS[kind] ?? ValveSVG }
 
@@ -58,7 +79,6 @@ function onElementContextMenu(e: MouseEvent, el: ScadaElement) {
 
   if (el.kind === 'valve') {
     const cfg = el.config as ValveConfig
-    // Digital command — C_SC_NA_1 (45) or C_DC_NA_1 (46)
     const typeId = (sig.type_id === 3 || sig.type_id === 31) ? 46 : 45
     items.push(
       { icon: '▶', label: `Open (value = 1)`, action: () => sendDigital(sig, typeId, 1) },
@@ -69,7 +89,6 @@ function onElementContextMenu(e: MouseEvent, el: ScadaElement) {
       items.splice(1, 0, { divider: true, label: '', action: () => {} })
     }
   } else if (el.kind === 'pct_bar') {
-    // Analog setpoint — C_SE_NC_1 (50)
     const cur = dp?.value ?? 0
     items.push({
       icon: '↕', label: `Set value… (now ${cur.toFixed(1)} ${sig.unit})`,
@@ -77,7 +96,13 @@ function onElementContextMenu(e: MouseEvent, el: ScadaElement) {
     })
   }
 
-  if (!items.length) return
+  // History option always appended when signal is bound
+  if (items.length) items.push({ divider: true, label: '', action: () => {} })
+  items.push({
+    icon: '📈', label: 'View history…',
+    action: () => { historySignal.value = el.signal_id },
+  })
+
   ctxMenu.value = { x: e.clientX, y: e.clientY, items }
 }
 
@@ -136,6 +161,18 @@ function promptSetpoint(sig: Signal) {
         }"
         @contextmenu.prevent
       >
+        <!-- Connection layer (read-only in live mode) -->
+        <ConnectionLayer
+          :lines="view.lines ?? []"
+          :elements="elements"
+          :width="view.width"
+          :height="view.height"
+          :selected-line-id="null"
+          :design="false"
+          :preview-from="null"
+          :preview-to="null"
+        />
+
         <div
           v-for="el in elements"
           :key="el.id"
@@ -170,6 +207,13 @@ function promptSetpoint(sig: Signal) {
       :y="ctxMenu.y"
       :items="ctxMenu.items"
       @close="ctxMenu = null"
+    />
+
+    <!-- History modal -->
+    <HistoryModal
+      v-if="historySignal !== null"
+      :signal-id="historySignal"
+      @close="historySignal = null"
     />
   </div>
 

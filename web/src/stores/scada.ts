@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { scadaAPI, type ScadaView, type ScadaElement } from '@/api/client'
+import { scadaAPI, type ScadaView, type ScadaElement, type ScadaLine } from '@/api/client'
+import { generateUUID } from '@/lib/utils'
 
 export const useScadaStore = defineStore('scada', () => {
   const views      = ref<ScadaView[]>([])
@@ -14,11 +15,13 @@ export const useScadaStore = defineStore('scada', () => {
   }
 
   async function loadView(id: number) {
-    activeView.value = await scadaAPI.get(id)
+    const v = await scadaAPI.get(id)
+    if (v && !v.lines) v.lines = []
+    activeView.value = v
   }
 
   async function createView(name: string) {
-    const v = await scadaAPI.create({ name, width: 1400, height: 900, elements: [] })
+    const v = await scadaAPI.create({ name, width: 1400, height: 900, elements: [], lines: [] })
     views.value.push(v)
     return v
   }
@@ -29,7 +32,6 @@ export const useScadaStore = defineStore('scada', () => {
     if (activeView.value?.id === id) activeView.value = null
   }
 
-  // Debounced autosave — called after any element mutation in the design editor
   function scheduleSave() {
     if (!activeView.value) return
     saving.value = 'saving'
@@ -42,6 +44,7 @@ export const useScadaStore = defineStore('scada', () => {
           width:    activeView.value.width,
           height:   activeView.value.height,
           elements: activeView.value.elements,
+          lines:    activeView.value.lines ?? [],
         })
         saving.value = 'saved'
         setTimeout(() => { saving.value = 'idle' }, 2000)
@@ -50,6 +53,8 @@ export const useScadaStore = defineStore('scada', () => {
       }
     }, 600)
   }
+
+  // ── Elements ──────────────────────────────────────────────────────────────
 
   function addElement(el: ScadaElement) {
     activeView.value?.elements.push(el)
@@ -66,6 +71,10 @@ export const useScadaStore = defineStore('scada', () => {
   function removeElement(id: string) {
     if (!activeView.value) return
     activeView.value.elements = activeView.value.elements.filter(e => e.id !== id)
+    // Also remove lines attached to this element
+    activeView.value.lines = (activeView.value.lines ?? []).filter(
+      l => l.from_el !== id && l.to_el !== id,
+    )
     scheduleSave()
   }
 
@@ -75,7 +84,7 @@ export const useScadaStore = defineStore('scada', () => {
     if (!src) return
     const clone: ScadaElement = {
       ...src,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       x:  src.x + 24,
       y:  src.y + 24,
       config: { ...src.config },
@@ -85,10 +94,33 @@ export const useScadaStore = defineStore('scada', () => {
     return clone.id
   }
 
+  // ── Lines ─────────────────────────────────────────────────────────────────
+
+  function addLine(line: ScadaLine) {
+    if (!activeView.value) return
+    if (!activeView.value.lines) activeView.value.lines = []
+    activeView.value.lines.push(line)
+    scheduleSave()
+  }
+
+  function updateLine(line: ScadaLine) {
+    if (!activeView.value?.lines) return
+    const idx = activeView.value.lines.findIndex(l => l.id === line.id)
+    if (idx !== -1) activeView.value.lines[idx] = line
+    scheduleSave()
+  }
+
+  function removeLine(id: string) {
+    if (!activeView.value) return
+    activeView.value.lines = (activeView.value.lines ?? []).filter(l => l.id !== id)
+    scheduleSave()
+  }
+
   return {
     views, activeView, saving,
     loadViews, loadView, createView, deleteView,
     addElement, updateElement, removeElement, duplicateElement,
+    addLine, updateLine, removeLine,
     scheduleSave,
   }
 })

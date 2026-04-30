@@ -31,6 +31,9 @@ type Store interface {
 
 	ListAllSignals() ([]models.Signal, error)
 
+	InsertHistory(signalID int64, ts float64, value float64, quality uint8) error
+	QueryHistory(signalID int64, from, to float64, limit int) ([]models.HistoryPoint, error)
+
 	ListScadaViews() ([]models.ScadaView, error)
 	GetScadaView(id int64) (*models.ScadaView, error)
 	CreateScadaView(v *models.ScadaView) error
@@ -118,6 +121,14 @@ func (s *sqliteStore) migrate() error {
 			created_at TEXT    NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
 		)`,
+		`CREATE TABLE IF NOT EXISTS signal_history (
+			signal_id INTEGER NOT NULL,
+			ts        REAL    NOT NULL,
+			value     REAL    NOT NULL,
+			quality   INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (signal_id, ts)
+		) WITHOUT ROWID`,
+		`CREATE INDEX IF NOT EXISTS idx_history_signal_ts ON signal_history(signal_id, ts)`,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,6 +137,8 @@ func (s *sqliteStore) migrate() error {
 			return fmt.Errorf("stmt failed: %w\n%s", err, stmt[:40])
 		}
 	}
+	// Additive column migrations — ignore error if column already exists.
+	s.db.Exec(`ALTER TABLE scada_views ADD COLUMN lines TEXT DEFAULT '[]'`) //nolint
 	return nil
 }
 
@@ -412,8 +425,9 @@ func (s *sqliteStore) ListScadaViews() ([]models.ScadaView, error) {
 func (s *sqliteStore) GetScadaView(id int64) (*models.ScadaView, error) {
 	v := &models.ScadaView{}
 	var created, updated, elements string
-	err := s.db.QueryRow(`SELECT id,name,width,height,elements,created_at,updated_at FROM scada_views WHERE id=?`, id).
-		Scan(&v.ID, &v.Name, &v.Width, &v.Height, &elements, &created, &updated)
+	var linesStr sql.NullString
+	err := s.db.QueryRow(`SELECT id,name,width,height,elements,COALESCE(lines,'[]'),created_at,updated_at FROM scada_views WHERE id=?`, id).
+		Scan(&v.ID, &v.Name, &v.Width, &v.Height, &elements, &linesStr, &created, &updated)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -421,6 +435,11 @@ func (s *sqliteStore) GetScadaView(id int64) (*models.ScadaView, error) {
 		return nil, err
 	}
 	v.Elements = json.RawMessage(elements)
+	if linesStr.Valid && linesStr.String != "" {
+		v.Lines = json.RawMessage(linesStr.String)
+	} else {
+		v.Lines = json.RawMessage("[]")
+	}
 	v.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	v.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
 	return v, nil
@@ -433,8 +452,12 @@ func (s *sqliteStore) CreateScadaView(v *models.ScadaView) error {
 	if elements == "" {
 		elements = "[]"
 	}
-	res, err := s.db.Exec(`INSERT INTO scada_views (name,width,height,elements) VALUES (?,?,?,?)`,
-		v.Name, v.Width, v.Height, elements)
+	lines := string(v.Lines)
+	if lines == "" {
+		lines = "[]"
+	}
+	res, err := s.db.Exec(`INSERT INTO scada_views (name,width,height,elements,lines) VALUES (?,?,?,?,?)`,
+		v.Name, v.Width, v.Height, elements, lines)
 	if err != nil {
 		return err
 	}
@@ -449,8 +472,12 @@ func (s *sqliteStore) UpdateScadaView(v *models.ScadaView) error {
 	if elements == "" {
 		elements = "[]"
 	}
-	_, err := s.db.Exec(`UPDATE scada_views SET name=?,width=?,height=?,elements=?,updated_at=datetime('now') WHERE id=?`,
-		v.Name, v.Width, v.Height, elements, v.ID)
+	lines := string(v.Lines)
+	if lines == "" {
+		lines = "[]"
+	}
+	_, err := s.db.Exec(`UPDATE scada_views SET name=?,width=?,height=?,elements=?,lines=?,updated_at=datetime('now') WHERE id=?`,
+		v.Name, v.Width, v.Height, elements, lines, v.ID)
 	return err
 }
 
@@ -459,6 +486,50 @@ func (s *sqliteStore) DeleteScadaView(id int64) error {
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`DELETE FROM scada_views WHERE id=?`, id)
 	return err
+}
+
+// --- Signal history ---
+
+const historyRetentionSec = 7 * 24 * 3600 // 7 days
+
+func (s *sqliteStore) InsertHistory(signalID int64, ts float64, value float64, quality uint8) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := ts - historyRetentionSec
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO signal_history (signal_id,ts,value,quality) VALUES (?,?,?,?);
+		 DELETE FROM signal_history WHERE signal_id=? AND ts < ?`,
+		signalID, ts, value, int(quality),
+		signalID, cutoff,
+	)
+	return err
+}
+
+func (s *sqliteStore) QueryHistory(signalID int64, from, to float64, limit int) ([]models.HistoryPoint, error) {
+	if limit <= 0 || limit > 5000 {
+		limit = 2000
+	}
+	rows, err := s.db.Query(
+		`SELECT ts,value,quality FROM signal_history
+		 WHERE signal_id=? AND ts>=? AND ts<=?
+		 ORDER BY ts ASC LIMIT ?`,
+		signalID, from, to, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var pts []models.HistoryPoint
+	for rows.Next() {
+		var p models.HistoryPoint
+		var q int
+		if err := rows.Scan(&p.TS, &p.Value, &q); err != nil {
+			return nil, err
+		}
+		p.Quality = uint8(q)
+		pts = append(pts, p)
+	}
+	return pts, rows.Err()
 }
 
 func (s *sqliteStore) Close() error {

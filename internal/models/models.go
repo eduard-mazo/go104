@@ -87,6 +87,7 @@ type ScadaView struct {
 	Width     int             `json:"width"`
 	Height    int             `json:"height"`
 	Elements  json.RawMessage `json:"elements"` // []ScadaElement JSON, stored as TEXT in SQLite
+	Lines     json.RawMessage `json:"lines"`     // []ScadaLine JSON, stored as TEXT in SQLite
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
@@ -97,4 +98,11 @@ type Command struct {
 	TypeID int     `json:"type_id"`
 	Value  float64 `json:"value"`
 	Select bool    `json:"select"`
+}
+
+// HistoryPoint is one time-series sample stored in signal_history.
+type HistoryPoint struct {
+	TS      float64 `json:"ts"`      // Unix epoch seconds (float64 for sub-second precision)
+	Value   float64 `json:"value"`
+	Quality uint8   `json:"quality"`
 }

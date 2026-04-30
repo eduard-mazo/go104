@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { ScadaElement, Signal, ValveConfig, PctBarConfig } from '@/api/client'
+import type { ScadaElement, Signal, ValveConfig, PctBarConfig, GaugeConfig } from '@/api/client'
 
 const props = defineProps<{
   element:    ScadaElement
@@ -23,6 +23,27 @@ function push() { emit('update', JSON.parse(JSON.stringify(local.value))) }
 // Typed config accessors
 const valveCfg  = computed(() => local.value.config as ValveConfig)
 const pctCfg    = computed(() => local.value.config as PctBarConfig)
+const gaugeCfg  = computed(() => local.value.config as GaugeConfig)
+
+const DIGITAL_KINDS = ['valve','circuit_breaker','motor','indicator_lamp','ball_valve','pump','compressor']
+const GAUGE_KINDS   = ['transformer','tank','flow_meter','pressure_gauge']
+const isDigital     = computed(() => DIGITAL_KINDS.includes(local.value.kind))
+const isGauge       = computed(() => GAUGE_KINDS.includes(local.value.kind))
+
+const kindLabel = computed(() => ({
+  valve:           'Gate Valve',
+  pct_bar:         '% Bar',
+  circuit_breaker: 'Circuit Breaker',
+  motor:           'Motor',
+  transformer:     'Transformer',
+  indicator_lamp:  'Lamp',
+  ball_valve:      'Ball Valve',
+  pump:            'Pump',
+  tank:            'Tank',
+  flow_meter:      'Flow Meter',
+  pressure_gauge:  'Pressure Gauge',
+  compressor:      'Compressor',
+}[local.value.kind] ?? local.value.kind))
 
 const signalLabel = (sig: Signal) =>
   `${sig.line_name} / ${sig.name} (IOA ${sig.ioa})`
@@ -85,41 +106,37 @@ const signalLabel = (sig: Signal) =>
       </select>
     </div>
 
-    <!-- Valve config -->
-    <div v-if="local.kind === 'valve'" class="px-4 py-3 space-y-2 border-b border-slate-800">
-      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">Valve</p>
+    <!-- Kind header -->
+    <div class="px-4 py-2 border-b border-slate-800/60">
+      <span class="text-[10px] font-mono uppercase tracking-widest text-amber-600">{{ kindLabel }}</span>
+    </div>
+
+    <!-- Digital element config (valve, breaker, motor, lamp, ball valve, pump, compressor) -->
+    <div v-if="isDigital" class="px-4 py-3 space-y-2 border-b border-slate-800">
+      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">Appearance</p>
       <div>
         <label class="block text-slate-500 mb-0.5">Label</label>
-        <input v-model="valveCfg.label" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="FCV-101" />
+        <input v-model="valveCfg.label" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="Tag / name" />
       </div>
       <div class="grid grid-cols-3 gap-2">
         <div>
-          <label class="block text-slate-500 mb-0.5">ON color</label>
-          <div class="flex items-center gap-1">
-            <input type="color" v-model="valveCfg.color_on" class="w-7 h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
-            <span class="font-mono text-[10px]">{{ valveCfg.color_on }}</span>
-          </div>
+          <label class="block text-slate-500 mb-0.5">ON</label>
+          <input type="color" v-model="valveCfg.color_on" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
         <div>
-          <label class="block text-slate-500 mb-0.5">OFF color</label>
-          <div class="flex items-center gap-1">
-            <input type="color" v-model="valveCfg.color_off" class="w-7 h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
-            <span class="font-mono text-[10px]">{{ valveCfg.color_off }}</span>
-          </div>
+          <label class="block text-slate-500 mb-0.5">OFF</label>
+          <input type="color" v-model="valveCfg.color_off" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
         <div>
           <label class="block text-slate-500 mb-0.5">Fault</label>
-          <div class="flex items-center gap-1">
-            <input type="color" v-model="valveCfg.color_fault" class="w-7 h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
-            <span class="font-mono text-[10px]">{{ valveCfg.color_fault }}</span>
-          </div>
+          <input type="color" v-model="valveCfg.color_fault" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
       </div>
     </div>
 
     <!-- % Bar config -->
     <div v-if="local.kind === 'pct_bar'" class="px-4 py-3 space-y-2 border-b border-slate-800">
-      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">% Bar</p>
+      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">Appearance</p>
       <div>
         <label class="block text-slate-500 mb-0.5">Label</label>
         <input v-model="pctCfg.label" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="Flow %" />
@@ -140,16 +157,51 @@ const signalLabel = (sig: Signal) =>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="block text-slate-500 mb-0.5">Fill color</label>
-          <div class="flex items-center gap-1">
-            <input type="color" v-model="pctCfg.color_fill" class="w-7 h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
-          </div>
+          <label class="block text-slate-500 mb-0.5">Fill</label>
+          <input type="color" v-model="pctCfg.color_fill" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
         <div>
-          <label class="block text-slate-500 mb-0.5">BG color</label>
-          <div class="flex items-center gap-1">
-            <input type="color" v-model="pctCfg.color_bg" class="w-7 h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
-          </div>
+          <label class="block text-slate-500 mb-0.5">BG</label>
+          <input type="color" v-model="pctCfg.color_bg" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Gauge config (tank, flow meter, pressure gauge, transformer) -->
+    <div v-if="isGauge" class="px-4 py-3 space-y-2 border-b border-slate-800">
+      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">Appearance</p>
+      <div>
+        <label class="block text-slate-500 mb-0.5">Label</label>
+        <input v-model="gaugeCfg.label" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="PT-101" />
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-slate-500 mb-0.5">Min</label>
+          <input v-model.number="gaugeCfg.min" type="number" step="any" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono" @change="push" />
+        </div>
+        <div>
+          <label class="block text-slate-500 mb-0.5">Max</label>
+          <input v-model.number="gaugeCfg.max" type="number" step="any" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono" @change="push" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-slate-500 mb-0.5">Unit</label>
+          <input v-model="gaugeCfg.unit" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="bar, m³…" />
+        </div>
+        <div>
+          <label class="block text-slate-500 mb-0.5">Alarm ≥</label>
+          <input v-model.number="gaugeCfg.alarm_high" type="number" step="any" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono" @change="push" placeholder="0 = off" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-slate-500 mb-0.5">Normal</label>
+          <input type="color" v-model="gaugeCfg.color_fill" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
+        </div>
+        <div>
+          <label class="block text-slate-500 mb-0.5">Alarm</label>
+          <input type="color" v-model="gaugeCfg.color_alarm" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
       </div>
     </div>

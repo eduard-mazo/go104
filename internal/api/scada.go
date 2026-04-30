@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 
 	"go104/internal/models"
 )
@@ -56,6 +58,9 @@ func (h *Handlers) createScadaView(w http.ResponseWriter, r *http.Request) {
 	if len(v.Elements) == 0 {
 		v.Elements = json.RawMessage("[]")
 	}
+	if len(v.Lines) == 0 {
+		v.Lines = json.RawMessage("[]")
+	}
 	if err := h.store.CreateScadaView(&v); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -77,6 +82,9 @@ func (h *Handlers) updateScadaView(w http.ResponseWriter, r *http.Request) {
 	v.ID = id
 	if len(v.Elements) == 0 {
 		v.Elements = json.RawMessage("[]")
+	}
+	if len(v.Lines) == 0 {
+		v.Lines = json.RawMessage("[]")
 	}
 	if err := h.store.UpdateScadaView(&v); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -108,4 +116,44 @@ func (h *Handlers) listAllSignals(w http.ResponseWriter, r *http.Request) {
 		sigs = []models.Signal{}
 	}
 	jsonOK(w, sigs)
+}
+
+func (h *Handlers) getSignalHistory(w http.ResponseWriter, r *http.Request) {
+	id, err := pathInt64(r, "id")
+	if err != nil {
+		jsonError(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	q := r.URL.Query()
+	now := float64(time.Now().UnixNano()) / 1e9
+	from := now - 3600 // default: last 1h
+	to := now
+	limit := 2000
+
+	if v := q.Get("from"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			from = f
+		}
+	}
+	if v := q.Get("to"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			to = f
+		}
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	pts, err := h.store.QueryHistory(id, from, to, limit)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if pts == nil {
+		pts = []models.HistoryPoint{}
+	}
+	jsonOK(w, pts)
 }

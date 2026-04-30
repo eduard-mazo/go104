@@ -463,6 +463,10 @@ func (w *LineWorker) processASDU(data []byte, giPending *bool) error {
 		if err := w.s.UpsertDatapoint(dp); err != nil {
 			slog.Error("[LINE] upsert datapoint", "id", w.cfg.ID, "signal", sig.ID, "err", err)
 		}
+		tsEpoch := float64(dp.Timestamp.UnixNano()) / 1e9
+		if err := w.s.InsertHistory(sig.ID, tsEpoch, dp.Value, dp.Quality); err != nil {
+			slog.Warn("[LINE] insert history", "signal", sig.ID, "err", err)
+		}
 		w.h.BroadcastDatapoint(dp)
 	}
 	return nil
