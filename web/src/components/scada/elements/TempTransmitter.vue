@@ -32,6 +32,10 @@ const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
 const cx = computed(() => props.w / 2)
 const cy = computed(() => props.h / 2)
 const r  = computed(() => Math.min(props.w, props.h) * 0.4)
+
+// Thermowell probe extends from circle bottom
+const probeY1 = computed(() => cy.value + r.value)
+const probeY2 = computed(() => cy.value + r.value + 12)
 </script>
 
 <template>
@@ -44,11 +48,11 @@ const r  = computed(() => Math.min(props.w, props.h) * 0.4)
     <!-- DCS horizontal line through circle center -->
     <line :x1="cx - r" :y1="cy" :x2="cx + r" :y2="cy" :stroke="stroke" stroke-width="1" opacity="0.6" style="transition: stroke 0.3s ease"/>
 
-    <!-- "PT" tag in upper half -->
+    <!-- "TT" tag in upper half -->
     <text :x="cx" :y="cy - r * 0.2"
           text-anchor="middle" dominant-baseline="middle"
           font-size="9" :fill="indicatorColor" font-family="monospace" font-weight="700"
-          style="transition: fill 0.3s ease">PT</text>
+          style="transition: fill 0.3s ease">TT</text>
 
     <!-- Value in lower half -->
     <text :x="cx" :y="cy + r * 0.38"
@@ -60,9 +64,10 @@ const r  = computed(() => Math.min(props.w, props.h) * 0.4)
     <text v-if="config.unit" :x="cx" :y="cy + r + 9"
           text-anchor="middle" font-size="7" fill="#64748b" font-family="monospace">{{ config.unit }}</text>
 
-    <!-- Impulse line / process tap stub below circle -->
-    <line :x1="cx" :y1="cy + r" :x2="cx" :y2="cy + r + 10"
-          :stroke="stroke" stroke-width="2" stroke-linecap="round" opacity="0.6" style="transition: stroke 0.3s ease"/>
+    <!-- Thermowell stub (filled rect representing probe) -->
+    <rect :x="cx - 3" :y="probeY1" width="6" :height="12"
+          :fill="indicatorColor" rx="1"
+          style="transition: fill 0.3s ease"/>
 
     <!-- Label -->
     <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>

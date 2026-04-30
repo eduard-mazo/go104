@@ -18,7 +18,12 @@ import Pump           from '@/components/scada/elements/Pump.vue'
 import Tank           from '@/components/scada/elements/Tank.vue'
 import FlowMeter      from '@/components/scada/elements/FlowMeter.vue'
 import PressureGauge  from '@/components/scada/elements/PressureGauge.vue'
-import Compressor     from '@/components/scada/elements/Compressor.vue'
+import Compressor      from '@/components/scada/elements/Compressor.vue'
+import ControlValve   from '@/components/scada/elements/ControlValve.vue'
+import CheckValve     from '@/components/scada/elements/CheckValve.vue'
+import HeatExchanger  from '@/components/scada/elements/HeatExchanger.vue'
+import TempTransmitter from '@/components/scada/elements/TempTransmitter.vue'
+import PipeSegment    from '@/components/scada/elements/PipeSegment.vue'
 import { ArrowLeft, Pencil } from 'lucide-vue-next'
 
 const route   = useRoute()
@@ -59,6 +64,11 @@ const ELEMENT_COMPONENTS: Record<string, any> = {
   flow_meter:      markRaw(FlowMeter),
   pressure_gauge:  markRaw(PressureGauge),
   compressor:      markRaw(Compressor),
+  control_valve:   markRaw(ControlValve),
+  check_valve:     markRaw(CheckValve),
+  heat_exchanger:  markRaw(HeatExchanger),
+  temp_tx:         markRaw(TempTransmitter),
+  pipe_segment:    markRaw(PipeSegment),
 }
 function elementComp(kind: string) { return ELEMENT_COMPONENTS[kind] ?? ValveSVG }
 

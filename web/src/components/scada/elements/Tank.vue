@@ -11,7 +11,7 @@ const props = defineProps<{
 }>()
 
 const pct = computed(() => {
-  if (!props.signal || props.signal.quality & 0x80) return 0
+  if (!props.signal || props.signal.quality & 0x80) return null
   const range = props.config.max - props.config.min
   if (range === 0) return 0
   return Math.max(0, Math.min(1, (props.signal.value - props.config.min) / range))
@@ -21,24 +21,37 @@ const alarm = computed(() =>
   props.config.alarm_high > 0 &&
   props.signal != null &&
   !(props.signal.quality & 0x80) &&
-  props.signal.value >= props.config.alarm_high,
+  props.signal.value >= props.config.alarm_high
 )
 
-const fillColor = computed(() => alarm.value ? props.config.color_alarm : props.config.color_fill)
+const fillColor = computed(() =>
+  !props.signal || (props.signal.quality & 0x80) ? '#64748b'
+  : alarm.value ? props.config.color_alarm : props.config.color_fill
+)
 
 const displayVal = computed(() => {
   if (!props.signal || props.signal.quality & 0x80) return '—'
   return props.signal.value.toFixed(1) + (props.config.unit ? ' ' + props.config.unit : '')
 })
 
-// Layout
-const PAD   = 4
-const TX    = computed(() => PAD)
-const TY    = computed(() => PAD)
-const TW    = computed(() => props.w - PAD * 2)
-const BODY  = computed(() => props.h - PAD * 2 - 18) // leave room for label
-const fillH = computed(() => BODY.value * pct.value)
-const fillY = computed(() => TY.value + BODY.value - fillH.value)
+const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
+
+// Layout constants
+const PAD  = 4
+const LABEL_H = 16
+
+// Body rectangle (leaves room at bottom for value text)
+const bx  = computed(() => PAD)
+const by  = computed(() => PAD)
+const bw  = computed(() => props.w - PAD * 2)
+const bh  = computed(() => props.h - PAD * 2 - LABEL_H)
+
+// Level line Y — computed from pct, top of tank = by, bottom = by+bh
+// pct=1 => top, pct=0 => bottom
+const levelY = computed(() => {
+  if (pct.value === null) return by.value + bh.value  // bottom (no signal)
+  return by.value + bh.value * (1 - pct.value)
+})
 
 // Alarm level line Y
 const alarmY = computed(() => {
@@ -46,49 +59,62 @@ const alarmY = computed(() => {
   const range = props.config.max - props.config.min
   if (range === 0) return null
   const ap = Math.max(0, Math.min(1, (props.config.alarm_high - props.config.min) / range))
-  return TY.value + BODY.value * (1 - ap)
+  return by.value + bh.value * (1 - ap)
+})
+
+// Nozzle stubs: short horizontal lines at mid-height from sides
+const nozzleY = computed(() => by.value + bh.value * 0.65)
+
+// Dome arc: top edge arc
+const domeD = computed(() => {
+  const x1 = bx.value + 2
+  const x2 = bx.value + bw.value - 2
+  const y  = by.value
+  const mx = bx.value + bw.value / 2
+  const my = y - 6
+  return `M ${x1} ${y} Q ${mx} ${my} ${x2} ${y}`
 })
 </script>
 
 <template>
-  <svg :width="w" :height="h" :viewBox="`0 0 ${w} ${h}`"
-       class="overflow-visible block" xmlns="http://www.w3.org/2000/svg">
-
-    <rect v-if="selected" x="-3" y="-3" :width="w+6" :height="h+6"
-          fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" rx="2"/>
+  <svg :width="w" :height="h" :viewBox="`0 0 ${w} ${h}`" class="overflow-visible block" xmlns="http://www.w3.org/2000/svg">
+    <rect v-if="selected" x="-3" y="-3" :width="w+6" :height="h+6" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" rx="2"/>
 
     <!-- Tank body background -->
-    <rect :x="TX" :y="TY" :width="TW" :height="BODY"
-          fill="#1e293b" stroke="#475569" stroke-width="1.5" rx="2"/>
+    <rect :x="bx" :y="by" :width="bw" :height="bh" fill="#0f1923" :stroke="stroke" stroke-width="1.5" rx="2" style="transition: stroke 0.3s ease"/>
 
-    <!-- Fill level (animated) -->
-    <rect :x="TX + 1" :y="fillY" :width="TW - 2" :height="fillH"
-          :fill="fillColor" rx="1"
-          style="transition: y 0.5s ease, height 0.5s ease, fill 0.35s ease"/>
+    <!-- Dome cap at top -->
+    <path :d="domeD" fill="none" :stroke="stroke" stroke-width="1.5" style="transition: stroke 0.3s ease"/>
 
-    <!-- Alarm line -->
+    <!-- Nozzle stubs (sides at ~65% height) -->
+    <line :x1="0" :y1="nozzleY" :x2="bx" :y2="nozzleY" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
+    <line :x1="bx + bw" :y1="nozzleY" :x2="w" :y2="nozzleY" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
+
+    <!-- Alarm level: dashed horizontal line -->
     <line v-if="alarmY !== null"
-          :x1="TX" :y1="alarmY" :x2="TX + TW" :y2="alarmY"
+          :x1="bx + 2" :y1="alarmY" :x2="bx + bw - 2" :y2="alarmY"
           :stroke="config.color_alarm" stroke-width="1" stroke-dasharray="3 2" opacity="0.8"/>
 
-    <!-- Tank border overlay (above fill) -->
-    <rect :x="TX" :y="TY" :width="TW" :height="BODY"
-          fill="none" stroke="#475569" stroke-width="1.5" rx="2"/>
+    <!-- Level line: solid horizontal line at current level -->
+    <line v-if="pct !== null"
+          :x1="bx + 2" :y1="levelY" :x2="bx + bw - 2" :y2="levelY"
+          :stroke="fillColor" stroke-width="2" stroke-linecap="round"
+          style="transition: y1 0.5s ease, y2 0.5s ease, stroke 0.3s ease"/>
 
-    <!-- Dome cap (top) -->
-    <path :d="`M ${TX + 2} ${TY + 4} Q ${TX + TW/2} ${TY - 6} ${TX + TW - 2} ${TY + 4}`"
-          fill="none" stroke="#475569" stroke-width="1.5"/>
+    <!-- Tank border overlay (above content) -->
+    <rect :x="bx" :y="by" :width="bw" :height="bh" fill="none" :stroke="stroke" stroke-width="1.5" rx="2" style="transition: stroke 0.3s ease"/>
 
-    <!-- Value text -->
-    <text :x="w/2" :y="TY + BODY + 12"
+    <!-- "LT" tag at top-left inside tank -->
+    <text :x="bx + 4" :y="by + 9" font-size="7" fill="#64748b" font-family="monospace" opacity="0.7">LT</text>
+
+    <!-- Value text at bottom of tank body -->
+    <text :x="w / 2" :y="by + bh + 12"
           text-anchor="middle" font-size="9"
-          :fill="signal && !(signal.quality & 0x80) ? fillColor : '#6b7280'"
+          :fill="signal && !(signal.quality & 0x80) ? fillColor : '#64748b'"
           font-family="monospace" font-weight="600"
-          style="transition: fill 0.35s ease">{{ displayVal }}</text>
+          style="transition: fill 0.3s ease">{{ displayVal }}</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="w/2" :y="h + 14"
-          text-anchor="middle" font-size="9" fill="#94a3b8"
-          font-family="monospace" letter-spacing="0.5">{{ config.label }}</text>
+    <text v-if="config.label" :x="w / 2" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

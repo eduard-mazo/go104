@@ -20,6 +20,11 @@ import Tank            from '@/components/scada/elements/Tank.vue'
 import FlowMeter       from '@/components/scada/elements/FlowMeter.vue'
 import PressureGauge   from '@/components/scada/elements/PressureGauge.vue'
 import Compressor      from '@/components/scada/elements/Compressor.vue'
+import ControlValve   from '@/components/scada/elements/ControlValve.vue'
+import CheckValve     from '@/components/scada/elements/CheckValve.vue'
+import HeatExchanger  from '@/components/scada/elements/HeatExchanger.vue'
+import TempTransmitter from '@/components/scada/elements/TempTransmitter.vue'
+import PipeSegment    from '@/components/scada/elements/PipeSegment.vue'
 import { ArrowLeft, Eye } from 'lucide-vue-next'
 
 const GRID = 12
@@ -81,6 +86,11 @@ const ELEMENT_COMPONENTS: Record<string, any> = {
   flow_meter:      markRaw(FlowMeter),
   pressure_gauge:  markRaw(PressureGauge),
   compressor:      markRaw(Compressor),
+  control_valve:   markRaw(ControlValve),
+  check_valve:     markRaw(CheckValve),
+  heat_exchanger:  markRaw(HeatExchanger),
+  temp_tx:         markRaw(TempTransmitter),
+  pipe_segment:    markRaw(PipeSegment),
 }
 
 function elementComp(kind: string) {
@@ -101,10 +111,15 @@ function defaultConfig(kind: string) {
     case 'ball_valve':      return { ...DIGITAL_DEFAULT }
     case 'pump':            return { ...DIGITAL_DEFAULT }
     case 'compressor':      return { ...DIGITAL_DEFAULT }
+    case 'control_valve':   return { ...DIGITAL_DEFAULT }
+    case 'check_valve':     return { ...DIGITAL_DEFAULT, color_on: '#22d3ee', color_off: '#1e293b', label: '' }
     case 'transformer':     return { ...GAUGE_DEFAULT, unit: 'kVA' }
     case 'tank':            return { ...GAUGE_DEFAULT, unit: 'm³', alarm_high: 90 }
     case 'flow_meter':      return { ...GAUGE_DEFAULT, unit: 'm³/h' }
     case 'pressure_gauge':  return { ...GAUGE_DEFAULT, unit: 'bar', alarm_high: 80 }
+    case 'heat_exchanger':  return { ...GAUGE_DEFAULT, unit: '°C', alarm_high: 80 }
+    case 'temp_tx':         return { ...GAUGE_DEFAULT, unit: '°C', alarm_high: 80 }
+    case 'pipe_segment':    return { style: 'process', color: '#64748b', label: '' }
     default: return {}
   }
 }
@@ -117,6 +132,11 @@ function defaultSize(kind: string) {
     case 'pressure_gauge': return { w: 72, h: 72 }
     case 'flow_meter':     return { w: 72, h: 56 }
     case 'circuit_breaker':return { w: 72, h: 40 }
+    case 'control_valve':  return { w: 48, h: 48 }
+    case 'check_valve':    return { w: 40, h: 32 }
+    case 'heat_exchanger': return { w: 100, h: 60 }
+    case 'temp_tx':        return { w: 56, h: 56 }
+    case 'pipe_segment':   return { w: 120, h: 16 }
     default:               return { w: 60, h: 60 }
   }
 }
@@ -259,6 +279,11 @@ const PORT_DEFS: Record<string, { id: string; rx: number; ry: number }[]> = {
   circuit_breaker: [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
   flow_meter:      [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
   compressor:      [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
+  control_valve:   [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
+  check_valve:     [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
+  heat_exchanger:  [{ id:'sl', rx:0, ry:0.35 }, { id:'sr', rx:1, ry:0.35 }, { id:'tl', rx:0, ry:0.65 }, { id:'tr', rx:1, ry:0.65 }],
+  temp_tx:         [{ id:'b', rx:0.5, ry:1 }],
+  pipe_segment:    [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
   motor:           [{ id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }, { id:'t', rx:0.5, ry:0 }],
   pump:            [{ id:'in', rx:0, ry:0.5 }, { id:'out', rx:0.5, ry:0 }],
   tank:            [{ id:'t', rx:0.5, ry:0 }, { id:'b', rx:0.5, ry:1 }, { id:'l', rx:0, ry:0.5 }, { id:'r', rx:1, ry:0.5 }],
@@ -366,39 +391,49 @@ function onUpdateLine(l: ScadaLine) {
 interface PaletteItem { kind: string; label: string; pw: number; ph: number; vb: string; svg: string }
 
 const PALETTE_FLUID: PaletteItem[] = [
-  { kind: 'valve',     label: 'Gate valve', pw: 30, ph: 20, vb: '0 0 30 20',
+  { kind: 'valve',         label: 'Gate valve',    pw: 30, ph: 20, vb: '0 0 30 20',
     svg: '<polygon points="0,0 15,10 0,20" fill="#374151" stroke="#475569" stroke-width="1"/><polygon points="30,0 15,10 30,20" fill="#374151" stroke="#475569" stroke-width="1"/>' },
-  { kind: 'ball_valve',label: 'Ball valve', pw: 28, ph: 22, vb: '0 0 28 22',
-    svg: '<line x1="0" y1="11" x2="7" y2="11" stroke="#475569" stroke-width="2"/><line x1="21" y1="11" x2="28" y2="11" stroke="#475569" stroke-width="2"/><circle cx="14" cy="11" r="8" fill="#374151" stroke="#475569" stroke-width="1"/><rect x="10" y="8" width="8" height="6" fill="#0a0e14" rx="2"/>' },
-  { kind: 'pump',      label: 'Pump',       pw: 24, ph: 24, vb: '0 0 24 24',
-    svg: '<circle cx="12" cy="12" r="10" fill="#374151" stroke="#475569" stroke-width="1"/><line x1="12" y1="12" x2="12" y2="4" stroke="white" stroke-width="1.5" opacity="0.6"/><line x1="12" y1="12" x2="19" y2="16" stroke="white" stroke-width="1.5" opacity="0.6"/><line x1="12" y1="12" x2="5" y2="16" stroke="white" stroke-width="1.5" opacity="0.6"/>' },
-  { kind: 'tank',      label: 'Tank',       pw: 18, ph: 32, vb: '0 0 18 32',
-    svg: '<rect x="2" y="2" width="14" height="28" fill="#1e293b" rx="1" stroke="#475569" stroke-width="1"/><rect x="3" y="18" width="12" height="11" fill="#22d3ee" rx="1"/>' },
-  { kind: 'pct_bar',   label: '% Bar',      pw: 16, ph: 32, vb: '0 0 16 32',
+  { kind: 'ball_valve',    label: 'Ball valve',    pw: 28, ph: 22, vb: '0 0 28 22',
+    svg: '<circle cx="14" cy="11" r="9" fill="#374151" stroke="#475569" stroke-width="1"/><line x1="5" y1="11" x2="23" y2="11" stroke="#0a0e14" stroke-width="5" stroke-linecap="round"/>' },
+  { kind: 'control_valve', label: 'Control valve', pw: 30, ph: 20, vb: '0 0 30 20',
+    svg: '<polygon points="0,0 15,10 0,20" fill="#374151" stroke="#475569" stroke-width="1"/><polygon points="30,0 15,10 30,20" fill="#374151" stroke="#475569" stroke-width="1"/><circle cx="15" cy="10" r="2" fill="#475569"/><line x1="15" y1="0" x2="15" y2="-4" stroke="#475569" stroke-width="1.5"/><circle cx="15" cy="-10" r="5" fill="none" stroke="#475569" stroke-width="1"/>' },
+  { kind: 'check_valve',   label: 'Check valve',   pw: 30, ph: 20, vb: '0 0 30 20',
+    svg: '<polygon points="0,0 29,10 0,20" fill="#374151" stroke="#475569" stroke-width="1"/><line x1="29" y1="0" x2="29" y2="20" stroke="#475569" stroke-width="2.5"/>' },
+  { kind: 'pump',          label: 'Pump',          pw: 24, ph: 24, vb: '0 0 24 24',
+    svg: '<circle cx="12" cy="12" r="10" fill="#374151" stroke="#475569" stroke-width="1"/><polygon points="12,7 19,16.5 5,16.5" fill="none" stroke="white" stroke-width="1.2" stroke-linejoin="round" opacity="0.7"/>' },
+  { kind: 'tank',          label: 'Tank',          pw: 18, ph: 32, vb: '0 0 18 32',
+    svg: '<rect x="2" y="2" width="14" height="28" fill="#0f1923" rx="1" stroke="#475569" stroke-width="1"/><line x1="3" y1="20" x2="15" y2="20" stroke="#22d3ee" stroke-width="1.5"/>' },
+  { kind: 'pct_bar',       label: '% Bar',         pw: 16, ph: 32, vb: '0 0 16 32',
     svg: '<rect x="3" y="2" width="10" height="28" fill="#1e293b" rx="1" stroke="#475569" stroke-width="1"/><rect x="3" y="16" width="10" height="14" fill="#22d3ee" rx="1"/>' },
+  { kind: 'pipe_segment',  label: 'Pipe',          pw: 36, ph: 10, vb: '0 0 36 10',
+    svg: '<line x1="0" y1="5" x2="36" y2="5" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>' },
 ]
 
 const PALETTE_GAS: PaletteItem[] = [
   { kind: 'compressor', label: 'Compressor', pw: 24, ph: 24, vb: '0 0 24 24',
-    svg: '<circle cx="12" cy="12" r="10" fill="#374151" stroke="#475569" stroke-width="1"/><path d="M6 8 q3 4 0 8 M11 8 q3 4 0 8" fill="none" stroke="white" stroke-width="1.2" opacity="0.7"/>' },
+    svg: '<circle cx="12" cy="12" r="10" fill="#374151" stroke="#475569" stroke-width="1"/><path d="M6 9 L10 12 L6 15 M14 9 L18 12 L14 15" fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>' },
 ]
 
 const PALETTE_ELEC: PaletteItem[] = [
-  { kind: 'circuit_breaker', label: 'Breaker',   pw: 32, ph: 18, vb: '0 0 32 18',
-    svg: '<line x1="0" y1="9" x2="9" y2="9" stroke="#475569" stroke-width="2"/><rect x="9" y="4" width="14" height="10" fill="#374151" stroke="#475569" stroke-width="1" rx="1"/><line x1="11" y1="9" x2="21" y2="9" stroke="white" stroke-width="1.5"/><line x1="23" y1="9" x2="32" y2="9" stroke="#475569" stroke-width="2"/>' },
-  { kind: 'motor',           label: 'Motor',     pw: 24, ph: 24, vb: '0 0 24 24',
+  { kind: 'circuit_breaker', label: 'Breaker',     pw: 32, ph: 18, vb: '0 0 32 18',
+    svg: '<line x1="0" y1="9" x2="9" y2="9" stroke="#475569" stroke-width="2"/><rect x="9" y="3" width="14" height="12" fill="#374151" stroke="#475569" stroke-width="1" rx="1"/><line x1="11" y1="9" x2="21" y2="9" stroke="white" stroke-width="1.5"/><line x1="23" y1="9" x2="32" y2="9" stroke="#475569" stroke-width="2"/>' },
+  { kind: 'motor',           label: 'Motor',       pw: 24, ph: 24, vb: '0 0 24 24',
     svg: '<circle cx="12" cy="12" r="10" fill="#374151" stroke="#475569" stroke-width="1"/><text x="12" y="13" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="white" font-family="monospace" font-weight="700">M</text>' },
-  { kind: 'transformer',     label: 'Transformer',pw: 32, ph: 24, vb: '0 0 32 24',
+  { kind: 'transformer',     label: 'Transformer', pw: 32, ph: 24, vb: '0 0 32 24',
     svg: '<circle cx="10" cy="12" r="8" fill="#0f172a" stroke="#475569" stroke-width="1"/><circle cx="22" cy="12" r="8" fill="#0f172a" stroke="#475569" stroke-width="1"/>' },
-  { kind: 'indicator_lamp',  label: 'Lamp',      pw: 22, ph: 22, vb: '0 0 22 22',
-    svg: '<circle cx="11" cy="11" r="9" fill="#22c55e" stroke="#475569" stroke-width="1" opacity="0.7"/><circle cx="8" cy="8" r="3" fill="white" opacity="0.25"/>' },
+  { kind: 'indicator_lamp',  label: 'Lamp',        pw: 22, ph: 22, vb: '0 0 22 22',
+    svg: '<circle cx="11" cy="11" r="9" fill="#22c55e" stroke="#475569" stroke-width="1" opacity="0.7"/><line x1="5" y1="5" x2="17" y2="17" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/><line x1="17" y1="5" x2="5" y2="17" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>' },
 ]
 
 const PALETTE_INST: PaletteItem[] = [
-  { kind: 'pressure_gauge', label: 'Pressure',  pw: 24, ph: 24, vb: '0 0 24 24',
-    svg: '<circle cx="12" cy="12" r="10" fill="#0f172a" stroke="#475569" stroke-width="1"/><path d="M5 17 A 8 8 0 1 1 19 17" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" opacity="0.4"/><line x1="12" y1="12" x2="17" y2="7" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round"/>' },
-  { kind: 'flow_meter',     label: 'Flow meter', pw: 32, ph: 22, vb: '0 0 32 22',
-    svg: '<polygon points="16,2 30,11 16,20 2,11" fill="#374151" stroke="#475569" stroke-width="1"/><text x="16" y="11" text-anchor="middle" dominant-baseline="middle" font-size="7" fill="white" font-family="monospace">FT</text>' },
+  { kind: 'pressure_gauge', label: 'Pressure TX',  pw: 24, ph: 24, vb: '0 0 24 24',
+    svg: '<circle cx="12" cy="12" r="10" fill="#0f1923" stroke="#475569" stroke-width="1"/><line x1="2" y1="12" x2="22" y2="12" stroke="#475569" stroke-width="0.8" opacity="0.5"/><text x="12" y="10" text-anchor="middle" dominant-baseline="middle" font-size="5.5" fill="#22d3ee" font-family="monospace" font-weight="700">PT</text><text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-size="5" fill="#22d3ee" font-family="monospace">—</text>' },
+  { kind: 'flow_meter',     label: 'Flow TX',      pw: 24, ph: 24, vb: '0 0 24 24',
+    svg: '<circle cx="12" cy="12" r="10" fill="#0f1923" stroke="#475569" stroke-width="1"/><line x1="2" y1="12" x2="22" y2="12" stroke="#475569" stroke-width="0.8" opacity="0.5"/><text x="12" y="10" text-anchor="middle" dominant-baseline="middle" font-size="5.5" fill="#22d3ee" font-family="monospace" font-weight="700">FT</text><text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-size="5" fill="#22d3ee" font-family="monospace">—</text>' },
+  { kind: 'temp_tx',        label: 'Temp TX',      pw: 24, ph: 24, vb: '0 0 24 24',
+    svg: '<circle cx="12" cy="12" r="10" fill="#0f1923" stroke="#475569" stroke-width="1"/><line x1="2" y1="12" x2="22" y2="12" stroke="#475569" stroke-width="0.8" opacity="0.5"/><text x="12" y="10" text-anchor="middle" dominant-baseline="middle" font-size="5.5" fill="#22d3ee" font-family="monospace" font-weight="700">TT</text><text x="12" y="16" text-anchor="middle" dominant-baseline="middle" font-size="5" fill="#22d3ee" font-family="monospace">—</text><rect x="10" y="22" width="4" height="6" fill="#64748b" rx="1"/>' },
+  { kind: 'heat_exchanger', label: 'Heat exch.',   pw: 36, ph: 22, vb: '0 0 36 22',
+    svg: '<rect x="2" y="2" width="32" height="18" fill="#0f1923" stroke="#475569" stroke-width="1" rx="2"/><path d="M4 7 C 12 7 12 15 18 15 S 24 7 32 7" fill="none" stroke="#22d3ee" stroke-width="1.2" stroke-linecap="round"/>' },
 ]
 </script>
 

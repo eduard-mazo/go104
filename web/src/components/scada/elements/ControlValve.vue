@@ -10,7 +10,7 @@ const props = defineProps<{
   h:        number
 }>()
 
-// ON = running
+// ON = open (flow), OFF = closed
 const fill = computed(() =>
   !props.signal ? '#1e293b'
   : (props.signal.quality & 0x80) ? props.config.color_fault
@@ -19,42 +19,35 @@ const fill = computed(() =>
 
 const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
 
-const running = computed(() =>
+const isOn = computed(() =>
   props.signal && !(props.signal.quality & 0x80) && props.signal.value
 )
 
 const cx = computed(() => props.w / 2)
 const cy = computed(() => props.h / 2)
-const r  = computed(() => Math.min(props.w, props.h) / 2 - 2)
-
-// Circumference for spinning dashed ring
-const ringR  = computed(() => r.value + 3)
-const ringC  = computed(() => 2 * Math.PI * ringR.value)
-const dashOn = computed(() => ringC.value * 0.25)
-const dashOff= computed(() => ringC.value * 0.75)
+// Actuator circle: stem goes from top of bowtie to circle bottom, circle centered above
+const actuatorCy = computed(() => -8 - 8)  // cy=-16
 </script>
 
 <template>
   <svg :width="w" :height="h" :viewBox="`0 0 ${w} ${h}`" class="overflow-visible block" xmlns="http://www.w3.org/2000/svg">
     <rect v-if="selected" x="-3" y="-3" :width="w+6" :height="h+6" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" rx="2"/>
 
-    <!-- Animated running ring -->
-    <circle v-if="running"
-            :cx="cx" :cy="cy" :r="ringR"
-            fill="none" :stroke="fill" stroke-width="2" opacity="0.45"
-            :stroke-dasharray="`${dashOn} ${dashOff}`"
-            style="transition: stroke 0.3s ease">
-      <animateTransform attributeName="transform" type="rotate"
-                        :from="`0 ${cx} ${cy}`" :to="`360 ${cx} ${cy}`"
-                        dur="1.4s" repeatCount="indefinite"/>
-    </circle>
+    <!-- Bowtie body: left triangle -->
+    <polygon :points="`0,0 ${cx},${cy} 0,${h}`" :fill="fill" :stroke="stroke" stroke-width="1.5" stroke-linejoin="miter" style="transition: fill 0.3s ease, stroke 0.3s ease"/>
+    <!-- Bowtie body: right triangle -->
+    <polygon :points="`${w},0 ${cx},${cy} ${w},${h}`" :fill="fill" :stroke="stroke" stroke-width="1.5" stroke-linejoin="miter" style="transition: fill 0.3s ease, stroke 0.3s ease"/>
+    <!-- Center apex dot -->
+    <circle :cx="cx" :cy="cy" r="2.5" :fill="stroke"/>
 
-    <!-- Body circle -->
-    <circle :cx="cx" :cy="cy" :r="r" :fill="fill" :stroke="stroke" stroke-width="1.5" style="transition: fill 0.3s ease, stroke 0.3s ease"/>
+    <!-- Stem from bowtie top to actuator circle bottom -->
+    <line :x1="cx" y1="0" :x2="cx" :y2="-8" :stroke="stroke" stroke-width="1.5" stroke-linecap="square" style="transition: stroke 0.3s ease"/>
 
-    <!-- M glyph -->
-    <text :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle"
-          :font-size="r * 0.65" fill="white" font-family="monospace" font-weight="700">M</text>
+    <!-- ISA motor/actuator circle: filled when ON, outline when OFF -->
+    <circle :cx="cx" :cy="actuatorCy" r="8"
+            :fill="isOn ? stroke : '#1e293b'"
+            :stroke="stroke" stroke-width="1.5"
+            style="transition: fill 0.3s ease, stroke 0.3s ease"/>
 
     <!-- No signal indicator -->
     <text v-if="!signal" :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" font-size="7" fill="#6b7280" font-family="monospace">?</text>

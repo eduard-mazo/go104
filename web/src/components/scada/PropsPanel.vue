@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { ScadaElement, Signal, ValveConfig, PctBarConfig, GaugeConfig } from '@/api/client'
+import type { ScadaElement, Signal, ValveConfig, PctBarConfig, GaugeConfig, PipeConfig } from '@/api/client'
 
 const props = defineProps<{
   element:    ScadaElement
@@ -24,11 +24,13 @@ function push() { emit('update', JSON.parse(JSON.stringify(local.value))) }
 const valveCfg  = computed(() => local.value.config as ValveConfig)
 const pctCfg    = computed(() => local.value.config as PctBarConfig)
 const gaugeCfg  = computed(() => local.value.config as GaugeConfig)
+const pipeCfg   = computed(() => local.value.config as PipeConfig)
 
-const DIGITAL_KINDS = ['valve','circuit_breaker','motor','indicator_lamp','ball_valve','pump','compressor']
-const GAUGE_KINDS   = ['transformer','tank','flow_meter','pressure_gauge']
+const DIGITAL_KINDS = ['valve','circuit_breaker','motor','indicator_lamp','ball_valve','pump','compressor','control_valve','check_valve']
+const GAUGE_KINDS   = ['transformer','tank','flow_meter','pressure_gauge','heat_exchanger','temp_tx']
 const isDigital     = computed(() => DIGITAL_KINDS.includes(local.value.kind))
 const isGauge       = computed(() => GAUGE_KINDS.includes(local.value.kind))
+const isPipe        = computed(() => local.value.kind === 'pipe_segment')
 
 const kindLabel = computed(() => ({
   valve:           'Gate Valve',
@@ -43,6 +45,11 @@ const kindLabel = computed(() => ({
   flow_meter:      'Flow Meter',
   pressure_gauge:  'Pressure Gauge',
   compressor:      'Compressor',
+  control_valve:   'Control Valve',
+  check_valve:     'Check Valve',
+  heat_exchanger:  'Heat Exchanger',
+  temp_tx:         'Temp Transmitter',
+  pipe_segment:    'Pipe Segment',
 }[local.value.kind] ?? local.value.kind))
 
 const signalLabel = (sig: Signal) =>
@@ -203,6 +210,27 @@ const signalLabel = (sig: Signal) =>
           <label class="block text-slate-500 mb-0.5">Alarm</label>
           <input type="color" v-model="gaugeCfg.color_alarm" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
         </div>
+      </div>
+    </div>
+
+    <!-- Pipe segment config -->
+    <div v-if="isPipe" class="px-4 py-3 space-y-2 border-b border-slate-800">
+      <p class="text-[10px] uppercase tracking-widest text-slate-600 mb-1">Appearance</p>
+      <div>
+        <label class="block text-slate-500 mb-0.5">Label</label>
+        <input v-model="pipeCfg.label" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1 text-slate-200" @input="push" placeholder="Feed line" />
+      </div>
+      <div>
+        <label class="block text-slate-500 mb-0.5">Style</label>
+        <select v-model="pipeCfg.style" class="w-full bg-[#0a0e14] border border-slate-700 rounded px-2 py-1.5 text-slate-200" @change="push">
+          <option value="process">Process (thick)</option>
+          <option value="utility">Utility (medium)</option>
+          <option value="instrument">Instrument (thin)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-slate-500 mb-0.5">Color</label>
+        <input type="color" v-model="pipeCfg.color" class="w-full h-7 cursor-pointer rounded border border-slate-700 bg-transparent" @input="push" />
       </div>
     </div>
 

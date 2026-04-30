@@ -135,6 +135,12 @@ export interface GaugeConfig {
   label:       string
 }
 
+export interface PipeConfig {
+  style: 'process' | 'utility' | 'instrument'
+  color: string
+  label: string
+}
+
 export type ElementKind =
   | 'valve'            // gate valve (digital)
   | 'pct_bar'          // percentage bar (analog)
@@ -148,6 +154,11 @@ export type ElementKind =
   | 'flow_meter'       // flow meter (analog)
   | 'pressure_gauge'   // pressure gauge (analog)
   | 'compressor'       // gas compressor (digital)
+  | 'control_valve'    // actuated control valve (digital)
+  | 'check_valve'      // non-return / check valve (static/digital)
+  | 'heat_exchanger'   // shell & tube heat exchanger (analog)
+  | 'temp_tx'          // ISA temperature transmitter TT (analog)
+  | 'pipe_segment'     // static pipe segment (no signal)
 
 export interface ScadaElement {
   id:        string         // crypto.randomUUID()
@@ -158,7 +169,7 @@ export interface ScadaElement {
   h:         number
   rotation:  0 | 90 | 180 | 270
   signal_id: number | null
-  config:    ValveConfig | PctBarConfig | GaugeConfig
+  config:    ValveConfig | PctBarConfig | GaugeConfig | PipeConfig
 }
 
 export type ScadaLineStyle = 'pipe_water' | 'pipe_gas' | 'wire' | 'cable'

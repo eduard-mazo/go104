@@ -10,7 +10,7 @@ const props = defineProps<{
   h:        number
 }>()
 
-// ON = closed (energized), OFF = open
+// ON = closed (energized/conducting), OFF = open (tripped)
 const state = computed<'on' | 'off' | 'fault' | 'none'>(() => {
   if (!props.signal) return 'none'
   if (props.signal.quality & 0x80) return 'fault'
@@ -21,60 +21,57 @@ const bodyColor = computed(() => ({
   on:    props.config.color_on,
   off:   props.config.color_off,
   fault: props.config.color_fault,
-  none:  '#374151',
+  none:  '#1e293b',
 }[state.value]))
+
+const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
 
 const cx = computed(() => props.w / 2)
 const cy = computed(() => props.h / 2)
-const bw = computed(() => Math.min(props.w * 0.4, 28))
-const bh = computed(() => Math.min(props.h * 0.55, 28))
+
+// Box bounds
+const bx1 = computed(() => props.w * 0.2)
+const bx2 = computed(() => props.w * 0.8)
+const by1 = computed(() => props.h * 0.1)
+const by2 = computed(() => props.h * 0.9)
+const bw  = computed(() => bx2.value - bx1.value)
+const bh  = computed(() => by2.value - by1.value)
 </script>
 
 <template>
-  <svg :width="w" :height="h" :viewBox="`0 0 ${w} ${h}`"
-       class="overflow-visible block" xmlns="http://www.w3.org/2000/svg">
+  <svg :width="w" :height="h" :viewBox="`0 0 ${w} ${h}`" class="overflow-visible block" xmlns="http://www.w3.org/2000/svg">
+    <rect v-if="selected" x="-3" y="-3" :width="w+6" :height="h+6" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" rx="2"/>
 
-    <rect v-if="selected" x="-3" y="-3" :width="w+6" :height="h+6"
-          fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" rx="2"/>
+    <!-- Left terminal stub -->
+    <line :x1="0" :y1="cy" :x2="bx1" :y2="cy" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
+    <!-- Right terminal stub -->
+    <line :x1="bx2" :y1="cy" :x2="w" :y2="cy" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
 
-    <!-- Left pipe stub -->
-    <line :x1="0" :y1="cy" :x2="cx - bw/2 - 1" :y2="cy"
-          stroke="#475569" stroke-width="3" stroke-linecap="round"/>
-    <!-- Right pipe stub -->
-    <line :x1="cx + bw/2 + 1" :y1="cy" :x2="w" :y2="cy"
-          stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+    <!-- Body box -->
+    <rect :x="bx1" :y="by1" :width="bw" :height="bh" :fill="bodyColor" :stroke="stroke" stroke-width="1.5" rx="2" style="transition: fill 0.3s ease, stroke 0.3s ease"/>
 
-    <!-- Body rectangle -->
-    <rect :x="cx - bw/2" :y="cy - bh/2" :width="bw" :height="bh"
-          :fill="bodyColor" stroke="#475569" stroke-width="1.5" rx="2"
-          style="transition: fill 0.35s ease"/>
-
-    <!-- Closed symbol: horizontal line through box -->
+    <!-- ON (closed): horizontal contact line through center -->
     <line v-if="state === 'on'"
-          :x1="cx - bw/2 + 3" :y1="cy" :x2="cx + bw/2 - 3" :y2="cy"
-          stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-
-    <!-- Open symbol: diagonal slash -->
-    <line v-else-if="state === 'off'"
-          :x1="cx - bw/2 + 4" :y1="cy + bh/2 - 4" :x2="cx + bw/2 - 4" :y2="cy - bh/2 + 4"
+          :x1="bx1 + 4" :y1="cy" :x2="bx2 - 4" :y2="cy"
           stroke="white" stroke-width="2" stroke-linecap="round"/>
 
-    <!-- Fault: X -->
+    <!-- OFF (open): two short stubs + diagonal slash representing open contacts -->
+    <template v-else-if="state === 'off'">
+      <line :x1="bx1 + 4" :y1="cy" :x2="cx - 4" :y2="cy" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <line :x1="cx + 4" :y1="cy" :x2="bx2 - 4" :y2="cy" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <line :x1="cx - 3" :y1="by1 + 4" :x2="cx + 5" :y2="by2 - 4" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+    </template>
+
+    <!-- FAULT: X cross -->
     <template v-else-if="state === 'fault'">
-      <line :x1="cx - bw/2 + 4" :y1="cy - bh/2 + 4" :x2="cx + bw/2 - 4" :y2="cy + bh/2 - 4"
-            stroke="white" stroke-width="2" stroke-linecap="round"/>
-      <line :x1="cx - bw/2 + 4" :y1="cy + bh/2 - 4" :x2="cx + bw/2 - 4" :y2="cy - bh/2 + 4"
-            stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <line :x1="bx1 + 4" :y1="by1 + 4" :x2="bx2 - 4" :y2="by2 - 4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <line :x1="bx1 + 4" :y1="by2 - 4" :x2="bx2 - 4" :y2="by1 + 4" stroke="white" stroke-width="2" stroke-linecap="round"/>
     </template>
 
     <!-- No signal -->
-    <text v-if="state === 'none'" :x="cx" :y="cy + 1"
-          text-anchor="middle" dominant-baseline="middle"
-          font-size="8" fill="#6b7280" font-family="monospace">?</text>
+    <text v-if="state === 'none'" :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="#6b7280" font-family="monospace">?</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="cx" :y="h + 14"
-          text-anchor="middle" font-size="9" fill="#94a3b8"
-          font-family="monospace" letter-spacing="0.5">{{ config.label }}</text>
+    <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>
