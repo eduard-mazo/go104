@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
@@ -24,6 +25,8 @@ const strokeWidth = computed(() => {
 
 const cx = computed(() => props.w / 2)
 const cy = computed(() => props.h / 2)
+
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9 * props.w / 60))))
 </script>
 
 <template>
@@ -47,7 +50,9 @@ const cy = computed(() => props.h / 2)
           stroke="#f59e0b" :stroke-width="strokeWidth + 2" stroke-linecap="round" opacity="0.3"/>
 
     <!-- Label centered above pipe -->
-    <text v-if="config.label" :x="cx" :y="cy - strokeWidth - 4"
-          text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label"
+          :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy - strokeWidth - 4})` : undefined"
+          :x="cx" :y="cy - strokeWidth - 4"
+          text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

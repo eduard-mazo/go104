@@ -599,6 +599,7 @@ const PALETTE_INST: PaletteItem[] = [
               :selected="!connectMode && selectedId === el.id"
               :w="el.w"
               :h="el.h"
+              :rotation="el.rotation"
             />
 
             <!-- Resize handle -->

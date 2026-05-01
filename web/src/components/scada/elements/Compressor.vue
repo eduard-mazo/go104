@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 // ON = running
@@ -32,6 +33,11 @@ const ringR  = computed(() => r.value + 3)
 const ringC  = computed(() => 2 * Math.PI * ringR.value)
 const dashOn = computed(() => ringC.value * 0.15)
 const dashOff= computed(() => ringC.value * 0.85)
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -61,14 +67,17 @@ const dashOff= computed(() => ringC.value * 0.85)
           fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
 
     <!-- Small "C" tag near top-right -->
-    <text :x="cx + r * 0.52" :y="cy - r * 0.52"
+    <text :transform="rotation ? `rotate(${-rotation}, ${cx + r * 0.52}, ${cy - r * 0.52})` : undefined"
+          :x="cx + r * 0.52" :y="cy - r * 0.52"
           text-anchor="middle" dominant-baseline="middle"
           :font-size="r * 0.32" fill="white" font-family="monospace" font-weight="700" opacity="0.5">C</text>
 
     <!-- No signal indicator -->
-    <text v-if="!signal" :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" font-size="7" fill="#6b7280" font-family="monospace">?</text>
+    <text v-if="!signal" :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy + 1})` : undefined"
+          :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" :font-size="Math.max(6, fInner-1)" fill="#6b7280" font-family="monospace">?</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

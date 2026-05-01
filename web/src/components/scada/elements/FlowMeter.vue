@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 const alarm = computed(() =>
@@ -32,6 +33,11 @@ const stroke = computed(() => props.selected ? '#f59e0b' : '#64748b')
 const cx = computed(() => props.w / 2)
 const cy = computed(() => props.h / 2)
 const r  = computed(() => Math.min(props.w, props.h) * 0.4)
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -49,22 +55,26 @@ const r  = computed(() => Math.min(props.w, props.h) * 0.4)
     <line :x1="cx - r" :y1="cy" :x2="cx + r" :y2="cy" :stroke="stroke" stroke-width="1" opacity="0.6" style="transition: stroke 0.3s ease"/>
 
     <!-- "FT" tag in upper half -->
-    <text :x="cx" :y="cy - r * 0.2"
+    <text :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy - r * 0.2})` : undefined"
+          :x="cx" :y="cy - r * 0.2"
           text-anchor="middle" dominant-baseline="middle"
-          font-size="9" :fill="indicatorColor" font-family="monospace" font-weight="700"
+          :font-size="fTag" :fill="indicatorColor" font-family="monospace" font-weight="700"
           style="transition: fill 0.3s ease">FT</text>
 
     <!-- Value in lower half -->
-    <text :x="cx" :y="cy + r * 0.38"
+    <text :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy + r * 0.38})` : undefined"
+          :x="cx" :y="cy + r * 0.38"
           text-anchor="middle" dominant-baseline="middle"
-          font-size="8" :fill="indicatorColor" font-family="monospace" font-weight="600"
+          :font-size="fInner" :fill="indicatorColor" font-family="monospace" font-weight="600"
           style="transition: fill 0.3s ease">{{ displayVal }}</text>
 
     <!-- Unit below circle -->
-    <text v-if="config.unit" :x="cx" :y="cy + r + 9"
-          text-anchor="middle" font-size="7" fill="#64748b" font-family="monospace">{{ config.unit }}</text>
+    <text v-if="config.unit" :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy + r + 9})` : undefined"
+          :x="cx" :y="cy + r + 9"
+          text-anchor="middle" :font-size="Math.max(6, fInner-1)" fill="#64748b" font-family="monospace">{{ config.unit }}</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

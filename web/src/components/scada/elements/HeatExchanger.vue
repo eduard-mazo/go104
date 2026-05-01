@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 const alarm = computed(() =>
@@ -53,6 +54,11 @@ const tubePathD = computed(() => {
   const y2 = sy.value + sh.value * 0.72
   return `M ${x1} ${y0} C ${midX * 0.6} ${y0}, ${midX * 0.6} ${y1}, ${midX} ${y1} S ${x2 * 1.1} ${y2} ${x2} ${y2}`
 })
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -74,15 +80,18 @@ const tubePathD = computed(() => {
     <line :x1="sx + sw" :y1="tubeY" :x2="w" :y2="tubeY" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
 
     <!-- HE tag inside top-left -->
-    <text :x="sx + 4" :y="sy + 9" font-size="7" fill="#64748b" font-family="monospace" opacity="0.8">HE</text>
+    <text :transform="rotation ? `rotate(${-rotation}, ${sx + 4}, ${sy + 9})` : undefined"
+          :x="sx + 4" :y="sy + 9" :font-size="Math.max(6, fInner-1)" fill="#64748b" font-family="monospace" opacity="0.8">HE</text>
 
     <!-- Value text below shell -->
-    <text :x="w / 2" :y="sy + sh + 12"
-          text-anchor="middle" font-size="9"
+    <text :transform="rotation ? `rotate(${-rotation}, ${w / 2}, ${sy + sh + 12})` : undefined"
+          :x="w / 2" :y="sy + sh + 12"
+          text-anchor="middle" :font-size="fInner"
           :fill="indicatorColor" font-family="monospace" font-weight="600"
           style="transition: fill 0.3s ease">{{ displayVal }}</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="w / 2" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

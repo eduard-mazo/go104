@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 const pct = computed(() => {
@@ -74,6 +75,11 @@ const domeD = computed(() => {
   const my = y - 6
   return `M ${x1} ${y} Q ${mx} ${my} ${x2} ${y}`
 })
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -105,16 +111,19 @@ const domeD = computed(() => {
     <rect :x="bx" :y="by" :width="bw" :height="bh" fill="none" :stroke="stroke" stroke-width="1.5" rx="2" style="transition: stroke 0.3s ease"/>
 
     <!-- "LT" tag at top-left inside tank -->
-    <text :x="bx + 4" :y="by + 9" font-size="7" fill="#64748b" font-family="monospace" opacity="0.7">LT</text>
+    <text :transform="rotation ? `rotate(${-rotation}, ${bx + 4}, ${by + 9})` : undefined"
+          :x="bx + 4" :y="by + 9" :font-size="Math.max(6, fInner-1)" fill="#64748b" font-family="monospace" opacity="0.7">LT</text>
 
     <!-- Value text at bottom of tank body -->
-    <text :x="w / 2" :y="by + bh + 12"
-          text-anchor="middle" font-size="9"
+    <text :transform="rotation ? `rotate(${-rotation}, ${w / 2}, ${by + bh + 12})` : undefined"
+          :x="w / 2" :y="by + bh + 12"
+          text-anchor="middle" :font-size="fInner"
           :fill="signal && !(signal.quality & 0x80) ? fillColor : '#64748b'"
           font-family="monospace" font-weight="600"
           style="transition: fill 0.3s ease">{{ displayVal }}</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="w / 2" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

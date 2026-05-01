@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 // ON = closed (energized/conducting), OFF = open (tripped)
@@ -36,6 +37,11 @@ const by1 = computed(() => props.h * 0.1)
 const by2 = computed(() => props.h * 0.9)
 const bw  = computed(() => bx2.value - bx1.value)
 const bh  = computed(() => by2.value - by1.value)
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -69,9 +75,11 @@ const bh  = computed(() => by2.value - by1.value)
     </template>
 
     <!-- No signal -->
-    <text v-if="state === 'none'" :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="#6b7280" font-family="monospace">?</text>
+    <text v-if="state === 'none'" :transform="rotation ? `rotate(${-rotation}, ${cx}, ${cy + 1})` : undefined"
+          :x="cx" :y="cy + 1" text-anchor="middle" dominant-baseline="middle" :font-size="fInner" fill="#6b7280" font-family="monospace">?</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>

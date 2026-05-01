@@ -205,6 +205,7 @@ function promptSetpoint(sig: Signal) {
             :selected="false"
             :w="el.w"
             :h="el.h"
+            :rotation="el.rotation"
           />
         </div>
       </div>

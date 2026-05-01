@@ -8,6 +8,7 @@ const props = defineProps<{
   selected: boolean
   w:        number
   h:        number
+  rotation: 0 | 90 | 180 | 270
 }>()
 
 const alarm = computed(() =>
@@ -48,6 +49,11 @@ function windingLines(centX: number, centY: number, radius: number) {
     { x1: centX - hw, y1: centY + sp, x2: centX + hw, y2: centY + sp },
   ]
 }
+
+const fScale = computed(() => Math.min(props.w, props.h) / 60)
+const fLabel = computed(() => Math.max(7, Math.min(13, Math.round(9  * props.w / 60))))
+const fInner = computed(() => Math.max(6, Math.min(12, Math.round(9  * fScale.value))))
+const fTag   = computed(() => Math.max(7, Math.min(16, Math.round(11 * fScale.value))))
 </script>
 
 <template>
@@ -81,12 +87,14 @@ function windingLines(centX: number, centY: number, radius: number) {
     <line :x1="rx" :y1="cy + cr + 1" :x2="rx" :y2="h - 16" :stroke="stroke" stroke-width="2" stroke-linecap="round" style="transition: stroke 0.3s ease"/>
 
     <!-- Value text -->
-    <text :x="cx" :y="h - 4"
-          text-anchor="middle" font-size="9"
+    <text :transform="rotation ? `rotate(${-rotation}, ${cx}, ${h - 4})` : undefined"
+          :x="cx" :y="h - 4"
+          text-anchor="middle" :font-size="fInner"
           :fill="coilColor" font-family="monospace" font-weight="600"
           style="transition: fill 0.3s ease">{{ displayVal }}</text>
 
     <!-- Label -->
-    <text v-if="config.label" :x="cx" :y="h + 13" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
+    <text v-if="config.label" :transform="rotation ? `rotate(${-rotation}, ${w/2}, ${h+13})` : undefined"
+          :x="w/2" :y="h + 13" text-anchor="middle" :font-size="fLabel" fill="#94a3b8" font-family="monospace">{{ config.label }}</text>
   </svg>
 </template>
