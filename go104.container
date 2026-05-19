@@ -1,0 +1,95 @@
+# Podman Quadlet — systemd-managed container unit for go104 (IEC 60870-5-104 master)
+# ==================================================================================
+#
+# INSTALLATION (run as useria on the target ppc64le host):
+#
+#   1. Load the image (one-time, offline):
+#        podman load -i go104-ppc64le.tar
+#
+#   2. Install this file:
+#        cp go104.container ~/.config/containers/systemd/go104.container
+#
+#   3. Reload and start:
+#        systemctl --user daemon-reload
+#        systemctl --user enable --now go104
+#
+#   4. Verify:
+#        systemctl --user status go104
+#        journalctl --user -u go104 -f
+#
+#   5. Open the web UI in a browser:
+#        http://<host-ip>:8080
+#      Configure IEC 104 lines (RTU/IED addresses) through the Lines panel.
+#      All state (lines, signals, SCADA designs) is persisted in the SQLite DB
+#      mounted at /data/go104.db inside the container.
+#
+# IMAGE BUILD (on a machine with Go + Docker/Podman, cross-compile for ppc64le):
+#
+#   make image                                      # build Vue frontend + cross-compile + docker build
+#   make image-save                                 # additionally save to go104-ppc64le.tar
+#   (copy tar to target host via USB or other offline media)
+#
+# UPGRADE:
+#   podman load -i go104-ppc64le-NEW.tar
+#   podman tag localhost/go104:ppc64le-NEW localhost/go104:ppc64le
+#   systemctl --user restart go104
+
+[Unit]
+Description=go104 — IEC 60870-5-104 master with embedded SCADA web UI
+Documentation=man:podman-systemd.unit(5)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Container]
+Image=localhost/go104:ppc64le
+
+# Never pull — image is loaded offline via: podman load -i go104-ppc64le.tar
+Pull=never
+
+ContainerName=go104
+
+# ─── Command ─────────────────────────────────────────────────────────────────
+# The binary reads HTTP_PORT and DB_PATH from the environment (see Environment=
+# below). No Exec= override needed — ENTRYPOINT /go104 starts the server.
+
+# ─── Environment ─────────────────────────────────────────────────────────────
+Environment=HTTP_PORT=8080
+Environment=DB_PATH=/data/go104.db
+
+# ─── Persistent storage ───────────────────────────────────────────────────────
+# SQLite database — survives container restarts and image upgrades.
+# The named volume is created automatically by Podman on first start.
+Volume=go104-data.volume:/data
+
+# ─── Networking ──────────────────────────────────────────────────────────────
+# Host networking lets the IEC 104 master reach RTUs/IEDs on the local network
+# without extra port mapping. The web UI is then accessible on the host IP.
+Network=host
+
+# ─── Resource limits ─────────────────────────────────────────────────────────
+PidsLimit=64
+# Uncomment to enforce memory ceiling:
+# MemoryMax=256M
+# MemorySwapMax=0
+
+# ─── Security hardening ──────────────────────────────────────────────────────
+# FROM-scratch image: no shell, no setuid binaries.
+# ReadOnly is NOT set — SQLite requires write access to the DB directory.
+# The /data volume is the only writable path needed.
+NoNewPrivileges=true
+DropCapability=ALL
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+# Query: journalctl --user -u go104 [-f] [--since "1 hour ago"]
+LogDriver=journald
+
+[Service]
+Restart=on-failure
+RestartSec=10s
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -1,8 +1,12 @@
 .PHONY: all build backend frontend dev dev-backend dev-frontend run test lint clean tidy docker \
-        release release-amd64 release-ppc64le
+        release release-amd64 release-ppc64le image image-save
 
 BINARY   := ./bin/go104
 WEB_DIR  := ./web
+
+# Container image
+IMAGE    ?= localhost/go104:ppc64le
+TARBALL  ?= go104-ppc64le.tar
 
 # Default: build for the host architecture
 all: build
@@ -57,10 +61,29 @@ release-amd64: frontend
 # Linux ppc64le — IBM POWER little-endian (RHEL for POWER / OpenPOWER)
 release-ppc64le: frontend
 	@mkdir -p bin
-	GOOS=linux GOARCH=ppc64le \
+	CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le \
 	  go build -ldflags="$(LDFLAGS)" \
 	  -o bin/go104-linux-ppc64le ./cmd/server
 	@echo "Built bin/go104-linux-ppc64le"
+
+# ── Container (ppc64le, air-gapped) ─────────────────────────────────────────
+
+# Build the ppc64le container image (requires Docker + buildx on the build host).
+# Steps: build Vue frontend → cross-compile Go binary → docker build.
+# FROM scratch + pre-built binary: no emulation needed, --platform sets metadata only.
+image: frontend
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le \
+		go build -trimpath -ldflags="-s -w" \
+		-o bin/go104-linux-ppc64le ./cmd/server
+	docker build --platform linux/ppc64le -t $(IMAGE) .
+
+# Save the image to a tar for transfer to the air-gapped RHEL target host.
+#   (copy via USB or other offline media, then on the target host:)
+#   podman load -i go104-ppc64le.tar
+image-save: image
+	docker save $(IMAGE) -o $(TARBALL)
+	@echo "Saved $(IMAGE) → $(TARBALL)"
 
 # ── Development helpers ───────────────────────────────────────────────────────
 
