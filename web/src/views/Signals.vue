@@ -33,22 +33,23 @@ function onSaved() {
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
-    <div class="flex items-center justify-between">
+  <div class="p-4 sm:p-6 space-y-6">
+    <div class="flex items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl font-bold text-white flex items-center gap-2">
-          <Radio class="w-5 h-5 text-blue-400" /> Signal Mapping
+        <h1 class="text-xl font-extrabold flex items-center gap-2 tracking-tight">
+          <Radio class="w-5 h-5 text-[color:var(--epm-citrico)]" />
+          Signal Mapping
         </h1>
-        <p class="text-sm text-slate-400 mt-0.5">Map IOA addresses to named signals per communication line</p>
+        <p class="text-sm text-muted-foreground mt-0.5">Map IOA addresses to named signals</p>
       </div>
-      <button class="btn-primary" :disabled="!selectedLine" @click="openAdd">
-        <Plus class="w-4 h-4" /> Map Signal
+      <button class="btn-primary shrink-0" :disabled="!selectedLine" @click="openAdd">
+        <Plus class="w-4 h-4" /> <span class="hidden sm:inline">Map Signal</span>
       </button>
     </div>
 
     <!-- Line selector -->
-    <div class="flex items-center gap-3">
-      <label class="text-sm text-slate-400">Line:</label>
+    <div class="flex items-center gap-3 flex-wrap">
+      <label class="text-sm text-muted-foreground font-semibold shrink-0">Line:</label>
       <select v-model.number="selectedLine" class="input-base w-64">
         <option v-for="l in lines" :key="l.id" :value="l.id">
           {{ l.name }} ({{ l.host }}:{{ l.port }})
@@ -57,12 +58,12 @@ function onSaved() {
     </div>
 
     <!-- Signals table -->
-    <div class="card overflow-hidden">
-      <div v-if="store.loading" class="px-4 py-10 text-center text-slate-400">Loading…</div>
-      <div v-else-if="!store.signals.length" class="px-4 py-10 text-center text-slate-400">
+    <div class="card overflow-x-auto">
+      <div v-if="store.loading" class="px-4 py-10 text-center text-muted-foreground text-sm">Loading…</div>
+      <div v-else-if="!store.signals.length" class="px-4 py-10 text-center text-muted-foreground text-sm">
         No signals mapped. Click <b>Map Signal</b> to add.
       </div>
-      <table v-else class="table-base">
+      <table v-else class="table-base min-w-[700px]">
         <thead>
           <tr>
             <th class="th">Name</th>
@@ -76,26 +77,26 @@ function onSaved() {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in store.signals" :key="s.id" class="hover:bg-slate-750">
-            <td class="td font-medium text-white">{{ s.name }}</td>
-            <td class="td font-mono text-blue-300">{{ s.ioa }}</td>
-            <td class="td text-xs font-mono text-slate-300">{{ typeIDName(s.type_id) }}</td>
+          <tr v-for="s in store.signals" :key="s.id" class="data-row">
+            <td class="td font-semibold">{{ s.name }}</td>
+            <td class="td tabular text-[color:var(--signal-wait)]">{{ s.ioa }}</td>
+            <td class="td text-xs font-mono text-muted-foreground">{{ typeIDName(s.type_id) }}</td>
             <td class="td">
-              <span :class="s.signal_type === 'digital' ? 'badge-yellow' : 'badge-slate'">
+              <span :class="s.signal_type === 'digital' ? 'badge-warn' : 'badge-muted'">
                 {{ s.signal_type }}
               </span>
             </td>
-            <td class="td text-slate-400">{{ s.unit || '—' }}</td>
-            <td class="td font-mono text-xs text-slate-400">
+            <td class="td text-muted-foreground">{{ s.unit || '—' }}</td>
+            <td class="td tabular text-muted-foreground text-xs">
               {{ s.scale }} / {{ s.offset }}
             </td>
-            <td class="td text-slate-400 max-w-xs truncate">{{ s.description || '—' }}</td>
+            <td class="td text-muted-foreground max-w-[200px] truncate">{{ s.description || '—' }}</td>
             <td class="td">
               <div class="flex items-center gap-1">
                 <button class="btn-ghost" @click="openEdit(s)">
                   <Pencil class="w-3.5 h-3.5" />
                 </button>
-                <button class="btn-ghost text-red-400 hover:text-red-300" @click="remove(s)">
+                <button class="btn-ghost text-destructive hover:text-destructive" @click="remove(s)">
                   <Trash2 class="w-3.5 h-3.5" />
                 </button>
               </div>

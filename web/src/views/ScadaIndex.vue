@@ -4,8 +4,8 @@ import { useRouter } from 'vue-router'
 import { useScadaStore } from '@/stores/scada'
 import { LayoutDashboard, Plus, Pencil, Eye, Trash2 } from 'lucide-vue-next'
 
-const store  = useScadaStore()
-const router = useRouter()
+const store   = useScadaStore()
+const router  = useRouter()
 const newName = ref('')
 const creating = ref(false)
 
@@ -27,28 +27,30 @@ async function remove(id: number, name: string) {
 </script>
 
 <template>
-  <div class="p-8 space-y-8 min-h-screen bg-[#060a10]">
+  <div class="p-8 space-y-8 min-h-full">
+
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-white flex items-center gap-3 font-mono tracking-tight">
-        <LayoutDashboard class="w-6 h-6 text-amber-500" />
+      <div class="rule-brand mb-4 w-20" />
+      <h1 class="text-2xl font-extrabold flex items-center gap-3 tracking-tight">
+        <LayoutDashboard class="w-6 h-6 text-[color:var(--epm-citrico)]" />
         SCADA Views
       </h1>
-      <p class="text-slate-500 mt-1 text-sm">Build and monitor process diagrams linked to live IEC104 signals</p>
+      <p class="text-muted-foreground mt-1 text-sm">
+        Build and monitor P&amp;ID diagrams linked to live IEC 104 signals
+      </p>
     </div>
 
-    <!-- Create new -->
+    <!-- Create -->
     <div class="flex items-center gap-3">
       <input
         v-model="newName"
-        class="bg-[#0d1117] border border-slate-700 rounded px-3 py-2 text-white
-               placeholder:text-slate-600 focus:outline-none focus:border-amber-600 w-72 text-sm"
+        class="input-base w-72"
         placeholder="New view name…"
         @keydown.enter="create"
       />
       <button
-        class="flex items-center gap-2 px-4 py-2 rounded bg-amber-600 hover:bg-amber-500
-               text-black font-semibold text-sm transition-colors disabled:opacity-40"
+        class="btn btn-primary gap-2"
         :disabled="!newName.trim() || creating"
         @click="create"
       >
@@ -56,44 +58,52 @@ async function remove(id: number, name: string) {
       </button>
     </div>
 
-    <!-- View cards -->
+    <!-- Cards grid -->
     <div v-if="store.views.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div
-        v-for="v in store.views" :key="v.id"
-        class="group relative bg-[#0d1117] border border-slate-800 rounded-lg p-5
-               hover:border-slate-600 transition-colors"
+        v-for="v in store.views"
+        :key="v.id"
+        class="group relative card p-5 transition-colors
+               hover:border-[color:var(--epm-citrico)]/40"
       >
-        <!-- Card header -->
         <div class="flex items-start justify-between gap-2">
-          <div>
-            <h2 class="font-bold text-white font-mono">{{ v.name }}</h2>
-            <p class="text-xs text-slate-600 mt-0.5 font-mono">
-              {{ v.width }} × {{ v.height }}px
-              <span v-if="v.updated_at"> · {{ new Date(v.updated_at).toLocaleDateString() }}</span>
+          <div class="min-w-0">
+            <h2 class="font-bold truncate">{{ v.name }}</h2>
+            <p class="text-xs text-muted-foreground mt-0.5 font-mono">
+              {{ v.width }} × {{ v.height }}
+              <span v-if="v.updated_at">
+                · {{ new Date(v.updated_at).toLocaleDateString() }}
+              </span>
             </p>
           </div>
           <button
-            class="opacity-0 group-hover:opacity-100 p-1 rounded text-red-500 hover:text-red-400 transition-all"
+            class="opacity-0 group-hover:opacity-100 p-1.5 rounded text-destructive
+                   hover:bg-destructive/10 transition-all"
             @click.stop="remove(v.id, v.name)"
           >
             <Trash2 class="w-4 h-4" />
           </button>
         </div>
 
+        <!-- Divider accent -->
+        <div class="rule-brand my-3 opacity-40" />
+
         <!-- Actions -->
-        <div class="flex gap-2 mt-4">
+        <div class="flex gap-2">
           <button
             class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded
-                   border border-slate-700 text-slate-300 hover:border-amber-600 hover:text-amber-400
-                   transition-colors text-xs font-mono"
+                   border border-border text-muted-foreground text-xs font-semibold
+                   hover:border-[color:var(--epm-citrico)] hover:text-[color:var(--epm-citrico)]
+                   transition-colors"
             @click="router.push(`/scada/${v.id}/design`)"
           >
             <Pencil class="w-3.5 h-3.5" /> Design
           </button>
           <button
             class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded
-                   border border-slate-700 text-slate-300 hover:border-cyan-600 hover:text-cyan-400
-                   transition-colors text-xs font-mono"
+                   border border-border text-muted-foreground text-xs font-semibold
+                   hover:border-[color:var(--signal-wait)] hover:text-[color:var(--signal-wait)]
+                   transition-colors"
             @click="router.push(`/scada/${v.id}/live`)"
           >
             <Eye class="w-3.5 h-3.5" /> Live
@@ -102,7 +112,7 @@ async function remove(id: number, name: string) {
       </div>
     </div>
 
-    <div v-else class="text-slate-600 text-sm font-mono mt-8">
+    <div v-else class="text-muted-foreground text-sm font-mono mt-8">
       No views yet. Create one above.
     </div>
   </div>

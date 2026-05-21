@@ -38,36 +38,37 @@ async function remove(l: Line) {
 
 function stateBadge(state: Line['state']) {
   switch (state) {
-    case 'ACTIVE':       return 'badge-green'
-    case 'CONNECTING':   return 'badge-yellow'
-    case 'STOPPED':      return 'badge-slate'
-    default:             return 'badge-red'
+    case 'ACTIVE':     return 'badge-ok'
+    case 'CONNECTING': return 'badge-warn'
+    case 'STOPPED':    return 'badge-muted'
+    default:           return 'badge-fault'
   }
 }
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-4">
       <div>
-        <h1 class="text-xl font-bold text-white flex items-center gap-2">
-          <Plug class="w-5 h-5 text-blue-400" /> Communication Lines
+        <h1 class="text-xl font-extrabold flex items-center gap-2 tracking-tight">
+          <Plug class="w-5 h-5 text-[color:var(--epm-citrico)]" />
+          Communication Lines
         </h1>
-        <p class="text-sm text-slate-400 mt-0.5">Manage IEC104 master connections (each line is independent)</p>
+        <p class="text-sm text-muted-foreground mt-0.5">IEC 104 master connections</p>
       </div>
-      <button class="btn-primary" @click="openAdd">
-        <Plus class="w-4 h-4" /> Add Line
+      <button class="btn-primary shrink-0" @click="openAdd">
+        <Plus class="w-4 h-4" /> <span class="hidden sm:inline">Add Line</span>
       </button>
     </div>
 
-    <!-- Table -->
-    <div class="card overflow-hidden">
-      <div v-if="store.loading" class="px-4 py-10 text-center text-slate-400">Loading…</div>
-      <div v-else-if="!store.lines.length" class="px-4 py-10 text-center text-slate-400">
+    <!-- Table (scrollable on mobile) -->
+    <div class="card overflow-x-auto">
+      <div v-if="store.loading" class="px-4 py-10 text-center text-muted-foreground text-sm">Loading…</div>
+      <div v-else-if="!store.lines.length" class="px-4 py-10 text-center text-muted-foreground text-sm">
         No lines configured. Click <b>Add Line</b> to get started.
       </div>
-      <table v-else class="table-base">
+      <table v-else class="table-base min-w-[640px]">
         <thead>
           <tr>
             <th class="th">Name</th>
@@ -80,32 +81,39 @@ function stateBadge(state: Line['state']) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="l in store.lines" :key="l.id" class="hover:bg-slate-750">
-            <td class="td font-medium text-white">{{ l.name }}</td>
-            <td class="td font-mono text-slate-300">{{ l.host }}:{{ l.port }}</td>
-            <td class="td text-slate-300">{{ l.common_address }}</td>
+          <tr v-for="l in store.lines" :key="l.id" class="data-row">
+            <td class="td font-semibold">{{ l.name }}</td>
+            <td class="td font-mono text-sm text-muted-foreground">{{ l.host }}:{{ l.port }}</td>
+            <td class="td text-muted-foreground">{{ l.common_address }}</td>
             <td class="td">
               <span :class="stateBadge(l.state)">{{ l.state }}</span>
             </td>
-            <td class="td font-mono text-xs text-slate-400">
+            <td class="td tabular text-muted-foreground">
               {{ l.rx_count }} / {{ l.tx_count }}
             </td>
-            <td class="td text-slate-400">{{ l.gi_interval_s || '—' }}</td>
+            <td class="td text-muted-foreground">{{ l.gi_interval_s || '—' }}</td>
             <td class="td">
               <div class="flex items-center gap-1">
-                <button class="btn-success" :disabled="!!busy[l.id] || l.state === 'ACTIVE' || l.state === 'CONNECTING'" @click="start(l)" title="Connect">
+                <button class="btn-success"
+                  :disabled="!!busy[l.id] || l.state === 'ACTIVE' || l.state === 'CONNECTING'"
+                  title="Connect" @click="start(l)">
                   <Play class="w-3.5 h-3.5" />
                 </button>
-                <button class="btn-danger" :disabled="!!busy[l.id] || l.state === 'DISCONNECTED' || l.state === 'STOPPED'" @click="stop(l)" title="Disconnect">
+                <button class="btn-danger"
+                  :disabled="!!busy[l.id] || l.state === 'DISCONNECTED' || l.state === 'STOPPED'"
+                  title="Disconnect" @click="stop(l)">
                   <Square class="w-3.5 h-3.5" />
                 </button>
-                <button class="btn-secondary" :disabled="busy[l.id] === 'gi' || l.state !== 'ACTIVE'" @click="gi(l)" title="General Interrogation">
+                <button class="btn-secondary"
+                  :disabled="busy[l.id] === 'gi' || l.state !== 'ACTIVE'"
+                  title="General Interrogation" @click="gi(l)">
                   <RefreshCw class="w-3.5 h-3.5" :class="busy[l.id] === 'gi' && 'animate-spin'" />
                 </button>
-                <button class="btn-ghost" @click="openEdit(l)" title="Edit">
+                <button class="btn-ghost" title="Edit" @click="openEdit(l)">
                   <Pencil class="w-3.5 h-3.5" />
                 </button>
-                <button class="btn-ghost text-red-400 hover:text-red-300" @click="remove(l)" title="Delete">
+                <button class="btn-ghost text-destructive hover:text-destructive"
+                  title="Delete" @click="remove(l)">
                   <Trash2 class="w-3.5 h-3.5" />
                 </button>
               </div>
