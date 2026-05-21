@@ -1,29 +1,13 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScadaStore } from '@/stores/scada'
 import { useMonitorStore } from '@/stores/monitor'
 import { allSignalsAPI, commandsAPI, type ScadaElement, type Signal, type ValveConfig } from '@/api/client'
+import { scadaRegistry } from '@/scada'
 import ContextMenu, { type MenuItem } from '@/components/scada/ContextMenu.vue'
 import ConnectionLayer from '@/components/scada/ConnectionLayer.vue'
 import HistoryModal from '@/components/scada/HistoryModal.vue'
-import ValveSVG       from '@/components/scada/elements/ValveSVG.vue'
-import PctBar         from '@/components/scada/elements/PctBar.vue'
-import CircuitBreaker from '@/components/scada/elements/CircuitBreaker.vue'
-import Motor          from '@/components/scada/elements/Motor.vue'
-import Transformer    from '@/components/scada/elements/Transformer.vue'
-import IndicatorLamp  from '@/components/scada/elements/IndicatorLamp.vue'
-import BallValve      from '@/components/scada/elements/BallValve.vue'
-import Pump           from '@/components/scada/elements/Pump.vue'
-import Tank           from '@/components/scada/elements/Tank.vue'
-import FlowMeter      from '@/components/scada/elements/FlowMeter.vue'
-import PressureGauge  from '@/components/scada/elements/PressureGauge.vue'
-import Compressor      from '@/components/scada/elements/Compressor.vue'
-import ControlValve   from '@/components/scada/elements/ControlValve.vue'
-import CheckValve     from '@/components/scada/elements/CheckValve.vue'
-import HeatExchanger  from '@/components/scada/elements/HeatExchanger.vue'
-import TempTransmitter from '@/components/scada/elements/TempTransmitter.vue'
-import PipeSegment    from '@/components/scada/elements/PipeSegment.vue'
 import { ArrowLeft, Pencil } from 'lucide-vue-next'
 
 const route   = useRoute()
@@ -51,33 +35,15 @@ const signalMap = computed(() => {
   return m
 })
 
-const ELEMENT_COMPONENTS: Record<string, any> = {
-  valve:           markRaw(ValveSVG),
-  pct_bar:         markRaw(PctBar),
-  circuit_breaker: markRaw(CircuitBreaker),
-  motor:           markRaw(Motor),
-  transformer:     markRaw(Transformer),
-  indicator_lamp:  markRaw(IndicatorLamp),
-  ball_valve:      markRaw(BallValve),
-  pump:            markRaw(Pump),
-  tank:            markRaw(Tank),
-  flow_meter:      markRaw(FlowMeter),
-  pressure_gauge:  markRaw(PressureGauge),
-  compressor:      markRaw(Compressor),
-  control_valve:   markRaw(ControlValve),
-  check_valve:     markRaw(CheckValve),
-  heat_exchanger:  markRaw(HeatExchanger),
-  temp_tx:         markRaw(TempTransmitter),
-  pipe_segment:    markRaw(PipeSegment),
+function elementComp(kind: string) {
+  return scadaRegistry.component(kind)
 }
-function elementComp(kind: string) { return ELEMENT_COMPONENTS[kind] ?? ValveSVG }
 
 function dpForEl(el: ScadaElement) {
   if (!el.signal_id) return null
   return monitor.datapoints[el.signal_id] ?? null
 }
 
-// ── right-click in live mode ──────────────────────────────────────────────
 function onElementContextMenu(e: MouseEvent, el: ScadaElement) {
   e.preventDefault()
   if (!el.signal_id) return
@@ -106,12 +72,8 @@ function onElementContextMenu(e: MouseEvent, el: ScadaElement) {
     })
   }
 
-  // History option always appended when signal is bound
   if (items.length) items.push({ divider: true, label: '', action: () => {} })
-  items.push({
-    icon: '📈', label: 'View history…',
-    action: () => { historySignal.value = el.signal_id },
-  })
+  items.push({ icon: '📈', label: 'View history…', action: () => { historySignal.value = el.signal_id } })
 
   ctxMenu.value = { x: e.clientX, y: e.clientY, items }
 }
@@ -131,47 +93,57 @@ function promptSetpoint(sig: Signal) {
 
 <template>
   <div class="flex flex-col h-screen overflow-hidden bg-[#060a10]" v-if="view">
-    <!-- ── Top toolbar ── -->
-    <div class="flex items-center gap-3 px-4 py-2 border-b border-slate-800 bg-[#0d1117] flex-shrink-0">
-      <button class="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-              @click="router.push('/scada')">
+
+    <!-- ── Top toolbar (EPM brand chrome) ── -->
+    <div class="flex items-center gap-2 px-3 py-2 border-b border-sidebar-border bg-sidebar flex-shrink-0">
+      <button
+        class="p-1.5 rounded hover:bg-sidebar-accent text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+        @click="router.push('/scada')">
         <ArrowLeft class="w-4 h-4" />
       </button>
 
-      <span class="font-mono font-bold text-white text-sm">{{ view.name }}</span>
+      <div class="w-px h-5 bg-sidebar-border mx-1" />
 
-      <!-- WS indicator -->
-      <div class="flex items-center gap-1.5 ml-3">
-        <span class="w-1.5 h-1.5 rounded-full"
-              :class="monitor.wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'" />
-        <span class="text-[10px] font-mono" :class="monitor.wsConnected ? 'text-green-400' : 'text-red-400'">
-          {{ monitor.wsConnected ? 'Live' : 'Disconnected' }}
+      <span class="font-mono font-bold text-sidebar-foreground text-sm">{{ view.name }}</span>
+
+      <!-- WS status -->
+      <div class="flex items-center gap-1.5 ml-2">
+        <span
+          class="status-dot"
+          :class="monitor.wsConnected ? 'text-[color:var(--epm-citrico)]' : 'text-[color:var(--signal-fault)]'"
+        />
+        <span class="text-[10px] font-mono hidden sm:block"
+          :class="monitor.wsConnected ? 'text-[color:var(--epm-citrico)]' : 'text-[color:var(--signal-fault)]'">
+          {{ monitor.wsConnected ? 'Live' : 'Offline' }}
         </span>
       </div>
 
-      <span class="ml-auto text-[10px] font-mono text-slate-600 uppercase tracking-widest">Live mode · right-click to command</span>
+      <span class="ml-auto text-[9px] font-mono text-sidebar-foreground/30 uppercase tracking-widest hidden md:block">
+        Live · right-click to command
+      </span>
 
       <button
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded border border-amber-800 text-amber-400
-               hover:bg-amber-950/30 text-xs font-mono transition-colors"
+        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded border
+               border-[color:var(--epm-citrico)]/40 text-[color:var(--epm-citrico)]
+               hover:bg-[color:var(--epm-citrico)]/10 text-xs font-mono transition-colors"
         @click="router.push(`/scada/${viewId}/design`)"
       >
         <Pencil class="w-3.5 h-3.5" /> Edit
       </button>
     </div>
 
-    <!-- ── Canvas (scrollable, no drag) ── -->
+    <!-- ── Canvas ── -->
     <div class="flex-1 overflow-auto p-8 bg-[#060a10]">
       <div
-        class="relative border border-slate-800 select-none"
+        class="relative select-none"
         :style="{
           width:  view.width + 'px',
           height: view.height + 'px',
           background: '#0a0e14',
+          border: '1px solid rgba(159,207,103,0.08)',
         }"
         @contextmenu.prevent
       >
-        <!-- Connection layer (read-only in live mode) -->
         <ConnectionLayer
           :lines="view.lines ?? []"
           :elements="elements"
@@ -211,7 +183,6 @@ function promptSetpoint(sig: Signal) {
       </div>
     </div>
 
-    <!-- Context menu -->
     <ContextMenu
       v-if="ctxMenu"
       :x="ctxMenu.x"
@@ -220,7 +191,6 @@ function promptSetpoint(sig: Signal) {
       @close="ctxMenu = null"
     />
 
-    <!-- History modal -->
     <HistoryModal
       v-if="historySignal !== null"
       :signal-id="historySignal"
@@ -228,7 +198,7 @@ function promptSetpoint(sig: Signal) {
     />
   </div>
 
-  <div v-else class="flex items-center justify-center h-screen text-slate-600 font-mono">
+  <div v-else class="flex items-center justify-center h-screen text-muted-foreground font-mono text-sm">
     Loading…
   </div>
 </template>

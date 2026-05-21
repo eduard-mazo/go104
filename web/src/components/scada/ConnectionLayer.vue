@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ScadaLine, ScadaElement } from '@/api/client'
+import { scadaRegistry } from '@/scada'
 
 const props = defineProps<{
   lines:          ScadaLine[]
@@ -13,6 +14,13 @@ const props = defineProps<{
   previewFrom:    { x: number; y: number } | null
   previewTo:      { x: number; y: number } | null
 }>()
+
+// Index elements by id for O(1) lookup in resolvePoint.
+const elementMap = computed(() => {
+  const m = new Map<string, ScadaElement>()
+  for (const e of props.elements) m.set(e.id, e)
+  return m
+})
 
 const emit = defineEmits<{
   selectLine: [id: string]
@@ -42,23 +50,28 @@ function orthoPath(fx: number, fy: number, tx: number, ty: number): string {
   return `M ${fx} ${fy} L ${mx} ${fy} L ${mx} ${ty} L ${tx} ${ty}`
 }
 
-// Resolve endpoint: if from_el is set, recompute from current element position
+// Resolve endpoint live: prefer port lookup so connections track moving elements.
+// Falls back to saved absolute pt for legacy lines (no port_id) and free endpoints.
 function resolvePoint(
-  elId: string | null,
-  pt: { x: number; y: number },
-  els: ScadaElement[],
+  elId:   string | null,
+  portId: string | undefined,
+  pt:     { x: number; y: number },
 ): { x: number; y: number } {
-  if (!elId) return pt
-  // pt stores port fractions encoded as fractional offsets of el bbox when saved;
-  // for simplicity use saved absolute coords (updated on move)
+  if (elId && portId) {
+    const el = elementMap.value.get(elId)
+    if (el) {
+      const p = scadaRegistry.portPoint(el, portId)
+      if (p) return p
+    }
+  }
   return pt
 }
 
 const resolvedLines = computed(() =>
   props.lines.map(l => ({
     ...l,
-    fp: resolvePoint(l.from_el, l.from_pt, props.elements),
-    tp: resolvePoint(l.to_el,   l.to_pt,   props.elements),
+    fp: resolvePoint(l.from_el, l.from_port, l.from_pt),
+    tp: resolvePoint(l.to_el,   l.to_port,   l.to_pt),
   }))
 )
 </script>

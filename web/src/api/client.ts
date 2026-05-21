@@ -178,7 +178,9 @@ export interface ScadaLine {
   id:           string
   from_el:      string | null  // element id (null = free endpoint)
   to_el:        string | null
-  from_pt:      { x: number; y: number }  // canvas-absolute coords
+  from_port?:   string         // port id on from_el (live-tracked if present)
+  to_port?:     string
+  from_pt:      { x: number; y: number }  // fallback / free endpoint
   to_pt:        { x: number; y: number }
   style:        ScadaLineStyle
   color:        string
