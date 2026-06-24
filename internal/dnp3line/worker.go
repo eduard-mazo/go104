@@ -136,9 +136,25 @@ func (w *Worker) TriggerGI() error {
 	return w.master.IntegrityPoll(w.osID)
 }
 
-// SendCommand is not supported on DNP3 lines yet (monitor-only).
-func (w *Worker) SendCommand(models.Command) error {
-	return fmt.Errorf("DNP3 controls not supported (monitor-only)")
+// SendCommand issues a DNP3 control to the outstation via DirectOperate. The
+// command's TypeID (the same IEC-104 codes the API/UI use) picks the control
+// kind: single/double commands (C_SC_NA_1=45 / C_DC_NA_1=46) operate a binary
+// output (CROB on/off from Value != 0); setpoints (C_SE_NA_1=48 / C_SE_NB_1=49 /
+// C_SE_NC_1=50) operate an analog output (Value). IOA is the DNP3 point index.
+// Select is ignored — goDnp3 exposes DirectOperate only.
+func (w *Worker) SendCommand(cmd models.Command) error {
+	if w.master == nil {
+		return fmt.Errorf("line not running")
+	}
+	idx := uint16(cmd.IOA)
+	switch cmd.TypeID {
+	case 45, 46: // C_SC_NA_1 / C_DC_NA_1 — binary command → CROB
+		return w.master.OperateBinary(w.osID, idx, cmd.Value != 0)
+	case 48, 49, 50: // C_SE_NA_1 / C_SE_NB_1 / C_SE_NC_1 — setpoint → analog output
+		return w.master.OperateAnalog(w.osID, idx, cmd.Value)
+	default:
+		return fmt.Errorf("DNP3: unsupported control type %d (use 45/46 binary or 48-50 setpoint)", cmd.TypeID)
+	}
 }
 
 // --- goDnp3.Handler ---
