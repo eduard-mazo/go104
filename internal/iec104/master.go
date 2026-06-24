@@ -5,23 +5,38 @@ import (
 	"log/slog"
 	"sync"
 
+	"go104/internal/dnp3line"
 	"go104/internal/hub"
 	"go104/internal/models"
 	"go104/internal/store"
 )
 
-// Master is a registry of independent LineWorkers.
-// Each line (and its TCP connection) is fully isolated.
+// Worker is one line driver — an IEC-104 LineWorker or a DNP3 dnp3line.Worker.
+// The registry treats both uniformly (Go satisfies this structurally, so neither
+// concrete type imports it).
+type Worker interface {
+	Start()
+	Stop()
+	State() models.LineState
+	RxCount() int64
+	TxCount() int64
+	RefreshSignals() error
+	TriggerGI() error
+	SendCommand(models.Command) error
+}
+
+// Master is a registry of independent line workers (one per line). Each line and
+// its connection is fully isolated.
 type Master struct {
 	mu      sync.RWMutex
-	workers map[int64]*LineWorker
+	workers map[int64]Worker
 	store   store.Store
 	hub     *hub.Hub
 }
 
 func NewMaster(s store.Store, h *hub.Hub) *Master {
 	return &Master{
-		workers: make(map[int64]*LineWorker),
+		workers: make(map[int64]Worker),
 		store:   s,
 		hub:     h,
 	}
@@ -47,7 +62,7 @@ func (m *Master) StartAll() error {
 // StopAll signals every worker to stop (does not wait for termination).
 func (m *Master) StopAll() {
 	m.mu.RLock()
-	ws := make([]*LineWorker, 0, len(m.workers))
+	ws := make([]Worker, 0, len(m.workers))
 	for _, w := range m.workers {
 		ws = append(ws, w)
 	}
@@ -65,13 +80,20 @@ func (m *Master) StartLine(line models.Line) error {
 	if _, ok := m.workers[line.ID]; ok {
 		return fmt.Errorf("line %d already running", line.ID)
 	}
-	w := NewLineWorker(line, m.store, m.hub)
+	// Dispatch by protocol: DNP3 lines poll an outstation via the shared goDnp3
+	// binding; everything else speaks IEC-104.
+	var w Worker
+	if line.IsDNP3() {
+		w = dnp3line.NewWorker(line, m.store, m.hub)
+	} else {
+		w = NewLineWorker(line, m.store, m.hub)
+	}
 	if err := w.RefreshSignals(); err != nil {
 		return fmt.Errorf("load signals: %w", err)
 	}
 	w.Start()
 	m.workers[line.ID] = w
-	slog.Info("line started", "id", line.ID, "name", line.Name,
+	slog.Info("line started", "id", line.ID, "name", line.Name, "protocol", line.Protocol,
 		"addr", fmt.Sprintf("%s:%d", line.Host, line.Port))
 	return nil
 }

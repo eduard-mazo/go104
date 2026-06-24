@@ -1,8 +1,19 @@
-.PHONY: all build backend frontend dev dev-backend dev-frontend run test lint clean tidy docker \
+.PHONY: all build backend backend-ffi frontend dev dev-backend dev-frontend run run-ffi test lint clean tidy docker \
         release release-amd64 release-ppc64le image image-save
 
 BINARY   := ./bin/go104
 WEB_DIR  := ./web
+
+# ── DNP3 (opendnp3 via the shared goDnp3 module) ──────────────────────────────
+# Default builds are pure-Go: DNP3 lines use the goDnp3 stub (they connect to
+# nothing). `make backend-ffi` / `run-ffi` link the real opendnp3 for live DNP3
+# polling — requires the goDnp3 sibling checkout with opendnp3 vendored
+# (cd ../goDnp3 && make opendnp3-vendor). modernc.org/sqlite stays pure-Go.
+GODNP3_DIR    ?= ../goDnp3
+DNP3_TRIPLE   ?= x86_64-unknown-linux-gnu
+DNP3_DIR      := $(abspath $(GODNP3_DIR))/third_party/opendnp3/$(DNP3_TRIPLE)
+DNP3_CXXFLAGS := -std=c++17 -I$(DNP3_DIR)/include
+DNP3_LDFLAGS  := -L$(DNP3_DIR)/lib -lopendnp3 -lssl -lcrypto -lstdc++ -lpthread -lm -ldl
 
 # Container image
 IMAGE    ?= localhost/go104:ppc64le
@@ -30,6 +41,14 @@ $(WEB_DIR)/node_modules: $(WEB_DIR)/package.json
 backend:
 	@mkdir -p bin
 	go build -ldflags="-s -w" -o $(BINARY) ./cmd/server
+
+# Backend with real DNP3 (cgo + opendnp3 via goDnp3); modernc sqlite stays pure-Go.
+backend-ffi:
+	@mkdir -p bin
+	CGO_ENABLED=1 \
+	CGO_CXXFLAGS="$(DNP3_CXXFLAGS)" \
+	CGO_LDFLAGS="$(DNP3_LDFLAGS)" \
+	go build -tags dnp3_ffi -ldflags="-s -w" -o $(BINARY) ./cmd/server
 
 # ── Cross-compilation release targets ─────────────────────────────────────────
 # These targets produce statically-linked, stripped binaries for Linux.
@@ -100,6 +119,10 @@ dev:
 
 PORT ?= 8080
 run: build
+	HTTP_PORT=$(PORT) $(BINARY)
+
+# Run the backend with real DNP3 (no frontend rebuild).
+run-ffi: backend-ffi
 	HTTP_PORT=$(PORT) $(BINARY)
 
 # ── Maintenance ───────────────────────────────────────────────────────────────

@@ -1,13 +1,17 @@
 module go104
 
-go 1.22
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-chi/cors v1.2.1
 	github.com/gorilla/websocket v1.5.3
+	goDnp3 v0.0.0
 	modernc.org/sqlite v1.33.1
 )
+
+// goDnp3 is the shared DNP3 (opendnp3) binding, a sibling checkout.
+replace goDnp3 => ../goDnp3
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

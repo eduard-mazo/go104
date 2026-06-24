@@ -45,8 +45,8 @@ type Store interface {
 
 type sqliteStore struct {
 	db      *sql.DB
-	mu      sync.Mutex  // single-writer for SQLite
-	dpCache sync.Map    // signalID int64 → *models.Datapoint
+	mu      sync.Mutex // single-writer for SQLite
+	dpCache sync.Map   // signalID int64 → *models.Datapoint
 }
 
 // New opens (or creates) a SQLite database and runs migrations.
@@ -138,7 +138,11 @@ func (s *sqliteStore) migrate() error {
 		}
 	}
 	// Additive column migrations — ignore error if column already exists.
-	s.db.Exec(`ALTER TABLE scada_views ADD COLUMN lines TEXT DEFAULT '[]'`) //nolint
+	s.db.Exec(`ALTER TABLE scada_views ADD COLUMN lines TEXT DEFAULT '[]'`)                   //nolint
+	s.db.Exec(`ALTER TABLE lines ADD COLUMN protocol TEXT NOT NULL DEFAULT 'iec104'`)         //nolint
+	s.db.Exec(`ALTER TABLE lines ADD COLUMN dnp3_outstation_addr INTEGER NOT NULL DEFAULT 0`) //nolint
+	s.db.Exec(`ALTER TABLE lines ADD COLUMN dnp3_master_addr INTEGER NOT NULL DEFAULT 0`)     //nolint
+	s.db.Exec(`ALTER TABLE signals ADD COLUMN point_type TEXT NOT NULL DEFAULT ''`)           //nolint
 	return nil
 }
 
@@ -168,7 +172,7 @@ func (s *sqliteStore) loadDPCache() error {
 
 func (s *sqliteStore) ListLines() ([]models.Line, error) {
 	rows, err := s.db.Query(`SELECT id,name,host,port,common_address,k,w,
-		t1_ms,t2_ms,t3_ms,gi_interval_s,enabled,created_at FROM lines ORDER BY id`)
+		t1_ms,t2_ms,t3_ms,gi_interval_s,protocol,dnp3_outstation_addr,dnp3_master_addr,enabled,created_at FROM lines ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +183,8 @@ func (s *sqliteStore) ListLines() ([]models.Line, error) {
 		var ca, enabled int
 		var created string
 		if err := rows.Scan(&l.ID, &l.Name, &l.Host, &l.Port, &ca,
-			&l.K, &l.W, &l.T1MS, &l.T2MS, &l.T3MS, &l.GIIntervalS, &enabled, &created); err != nil {
+			&l.K, &l.W, &l.T1MS, &l.T2MS, &l.T3MS, &l.GIIntervalS,
+			&l.Protocol, &l.DNP3OutstationAddr, &l.DNP3MasterAddr, &enabled, &created); err != nil {
 			return nil, err
 		}
 		l.CommonAddr = ca
@@ -195,9 +200,10 @@ func (s *sqliteStore) GetLine(id int64) (*models.Line, error) {
 	var ca, enabled int
 	var created string
 	err := s.db.QueryRow(`SELECT id,name,host,port,common_address,k,w,
-		t1_ms,t2_ms,t3_ms,gi_interval_s,enabled,created_at FROM lines WHERE id=?`, id).
+		t1_ms,t2_ms,t3_ms,gi_interval_s,protocol,dnp3_outstation_addr,dnp3_master_addr,enabled,created_at FROM lines WHERE id=?`, id).
 		Scan(&l.ID, &l.Name, &l.Host, &l.Port, &ca,
-			&l.K, &l.W, &l.T1MS, &l.T2MS, &l.T3MS, &l.GIIntervalS, &enabled, &created)
+			&l.K, &l.W, &l.T1MS, &l.T2MS, &l.T3MS, &l.GIIntervalS,
+			&l.Protocol, &l.DNP3OutstationAddr, &l.DNP3MasterAddr, &enabled, &created)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -213,10 +219,14 @@ func (s *sqliteStore) GetLine(id int64) (*models.Line, error) {
 func (s *sqliteStore) CreateLine(l *models.Line) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res, err := s.db.Exec(`INSERT INTO lines (name,host,port,common_address,k,w,t1_ms,t2_ms,t3_ms,gi_interval_s,enabled)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+	proto := l.Protocol
+	if proto == "" {
+		proto = models.ProtocolIEC104
+	}
+	res, err := s.db.Exec(`INSERT INTO lines (name,host,port,common_address,k,w,t1_ms,t2_ms,t3_ms,gi_interval_s,protocol,dnp3_outstation_addr,dnp3_master_addr,enabled)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		l.Name, l.Host, l.Port, l.CommonAddr, l.K, l.W,
-		l.T1MS, l.T2MS, l.T3MS, l.GIIntervalS, boolToInt(l.Enabled))
+		l.T1MS, l.T2MS, l.T3MS, l.GIIntervalS, proto, l.DNP3OutstationAddr, l.DNP3MasterAddr, boolToInt(l.Enabled))
 	if err != nil {
 		return err
 	}
@@ -227,10 +237,14 @@ func (s *sqliteStore) CreateLine(l *models.Line) error {
 func (s *sqliteStore) UpdateLine(l *models.Line) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	proto := l.Protocol
+	if proto == "" {
+		proto = models.ProtocolIEC104
+	}
 	_, err := s.db.Exec(`UPDATE lines SET name=?,host=?,port=?,common_address=?,k=?,w=?,
-		t1_ms=?,t2_ms=?,t3_ms=?,gi_interval_s=?,enabled=? WHERE id=?`,
+		t1_ms=?,t2_ms=?,t3_ms=?,gi_interval_s=?,protocol=?,dnp3_outstation_addr=?,dnp3_master_addr=?,enabled=? WHERE id=?`,
 		l.Name, l.Host, l.Port, l.CommonAddr, l.K, l.W,
-		l.T1MS, l.T2MS, l.T3MS, l.GIIntervalS, boolToInt(l.Enabled), l.ID)
+		l.T1MS, l.T2MS, l.T3MS, l.GIIntervalS, proto, l.DNP3OutstationAddr, l.DNP3MasterAddr, boolToInt(l.Enabled), l.ID)
 	return err
 }
 
@@ -245,7 +259,7 @@ func (s *sqliteStore) DeleteLine(id int64) error {
 
 func (s *sqliteStore) ListSignals(lineID int64) ([]models.Signal, error) {
 	rows, err := s.db.Query(`SELECT id,line_id,name,ioa,type_id,signal_type,unit,
-		scale,offset_val,description FROM signals WHERE line_id=? ORDER BY ioa`, lineID)
+		scale,offset_val,description,point_type FROM signals WHERE line_id=? ORDER BY ioa`, lineID)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +269,7 @@ func (s *sqliteStore) ListSignals(lineID int64) ([]models.Signal, error) {
 		var sig models.Signal
 		var kind string
 		if err := rows.Scan(&sig.ID, &sig.LineID, &sig.Name, &sig.IOA, &sig.TypeID,
-			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description); err != nil {
+			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description, &sig.PointType); err != nil {
 			return nil, err
 		}
 		sig.Kind = models.SignalKind(kind)
@@ -268,9 +282,9 @@ func (s *sqliteStore) GetSignal(id int64) (*models.Signal, error) {
 	sig := &models.Signal{}
 	var kind string
 	err := s.db.QueryRow(`SELECT id,line_id,name,ioa,type_id,signal_type,unit,
-		scale,offset_val,description FROM signals WHERE id=?`, id).
+		scale,offset_val,description,point_type FROM signals WHERE id=?`, id).
 		Scan(&sig.ID, &sig.LineID, &sig.Name, &sig.IOA, &sig.TypeID,
-			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description)
+			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description, &sig.PointType)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -296,10 +310,10 @@ func (s *sqliteStore) GetSignalsByLine(lineID int64) (map[int]*models.Signal, er
 func (s *sqliteStore) CreateSignal(sig *models.Signal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res, err := s.db.Exec(`INSERT INTO signals (line_id,name,ioa,type_id,signal_type,unit,scale,offset_val,description)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+	res, err := s.db.Exec(`INSERT INTO signals (line_id,name,ioa,type_id,signal_type,unit,scale,offset_val,description,point_type)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		sig.LineID, sig.Name, sig.IOA, sig.TypeID, string(sig.Kind),
-		sig.Unit, sig.Scale, sig.Offset, sig.Description)
+		sig.Unit, sig.Scale, sig.Offset, sig.Description, sig.PointType)
 	if err != nil {
 		return err
 	}
@@ -311,9 +325,9 @@ func (s *sqliteStore) UpdateSignal(sig *models.Signal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`UPDATE signals SET name=?,ioa=?,type_id=?,signal_type=?,unit=?,
-		scale=?,offset_val=?,description=? WHERE id=?`,
+		scale=?,offset_val=?,description=?,point_type=? WHERE id=?`,
 		sig.Name, sig.IOA, sig.TypeID, string(sig.Kind),
-		sig.Unit, sig.Scale, sig.Offset, sig.Description, sig.ID)
+		sig.Unit, sig.Scale, sig.Offset, sig.Description, sig.PointType, sig.ID)
 	return err
 }
 
@@ -379,7 +393,7 @@ func (s *sqliteStore) ListDatapoints(lineID int64) ([]models.Datapoint, error) {
 
 func (s *sqliteStore) ListAllSignals() ([]models.Signal, error) {
 	rows, err := s.db.Query(`SELECT s.id,s.line_id,s.name,s.ioa,s.type_id,s.signal_type,
-		s.unit,s.scale,s.offset_val,s.description,l.name
+		s.unit,s.scale,s.offset_val,s.description,s.point_type,l.name
 		FROM signals s JOIN lines l ON l.id=s.line_id
 		ORDER BY l.name, s.ioa`)
 	if err != nil {
@@ -391,7 +405,7 @@ func (s *sqliteStore) ListAllSignals() ([]models.Signal, error) {
 		var sig models.Signal
 		var kind string
 		if err := rows.Scan(&sig.ID, &sig.LineID, &sig.Name, &sig.IOA, &sig.TypeID,
-			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description, &sig.LineName); err != nil {
+			&kind, &sig.Unit, &sig.Scale, &sig.Offset, &sig.Description, &sig.PointType, &sig.LineName); err != nil {
 			return nil, err
 		}
 		sig.Kind = models.SignalKind(kind)
