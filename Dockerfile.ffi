@@ -1,0 +1,3 @@
+FROM scratch
+COPY bin/go104-linux-ppc64le-ffi /go104
+ENTRYPOINT ["/go104"]

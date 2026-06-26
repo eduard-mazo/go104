@@ -1,6 +1,7 @@
 .PHONY: all build backend backend-ffi frontend dev dev-backend dev-frontend run run-ffi test lint clean tidy docker \
-        release release-amd64 release-ppc64le release-icr release-icr-ffi verify-arm \
-        check-dnp3-arm check-arm-toolchain image image-save
+        release release-amd64 release-ppc64le release-ppc64le-ffi release-icr release-icr-ffi \
+        verify-arm verify-ppc64le check-dnp3-arm check-arm-toolchain \
+        check-dnp3-ppc64le check-ppc64le-toolchain image image-ffi image-save
 
 BINARY   := ./bin/go104
 WEB_DIR  := ./web
@@ -23,6 +24,12 @@ DNP3_ARM_TRIPLE   ?= armv7-unknown-linux-gnueabihf
 DNP3_ARM_DIR      := $(abspath $(GODNP3_DIR))/third_party/opendnp3/$(DNP3_ARM_TRIPLE)
 DNP3_ARM_CXXFLAGS := -std=c++17 -I$(DNP3_ARM_DIR)/include
 DNP3_ARM_LDFLAGS  := -L$(DNP3_ARM_DIR)/lib -lopendnp3 -l:libstdc++.a -lpthread -lm -ldl -static-libgcc
+
+# ppc64le cross (IBM POWER container). Same no-TLS, static-libstdc++ link as ARM.
+DNP3_PPC64LE_TRIPLE   ?= powerpc64le-unknown-linux-gnu
+DNP3_PPC64LE_DIR      := $(abspath $(GODNP3_DIR))/third_party/opendnp3/$(DNP3_PPC64LE_TRIPLE)
+DNP3_PPC64LE_CXXFLAGS := -std=c++17 -I$(DNP3_PPC64LE_DIR)/include
+DNP3_PPC64LE_LDFLAGS  := -L$(DNP3_PPC64LE_DIR)/lib -lopendnp3 -l:libstdc++.a -lpthread -lm -ldl -static-libgcc
 
 # Container image
 IMAGE    ?= localhost/go104:ppc64le
@@ -131,6 +138,25 @@ verify-arm:
 	@file bin/go104-linux-armv7-ffi | grep -q "statically linked" || echo "WARN: not statically linked — check CGO/toolchain"
 	@file bin/go104-linux-armv7-ffi; ls -lh bin/go104-linux-armv7-ffi
 
+# Linux ppc64le with REAL opendnp3, fully static — for the FROM-scratch POWER
+# container. Same rationale as the ICR FFI build: static so the scratch image
+# carries no glibc/libstdc++; netgo gives a pure-Go DNS resolver.
+release-ppc64le-ffi: check-dnp3-ppc64le check-ppc64le-toolchain frontend
+	@mkdir -p bin
+	CGO_ENABLED=1 GOOS=linux GOARCH=ppc64le \
+	CC=powerpc64le-linux-gnu-gcc \
+	CXX=powerpc64le-linux-gnu-g++ \
+	CGO_CXXFLAGS="$(DNP3_PPC64LE_CXXFLAGS)" \
+	CGO_LDFLAGS="$(DNP3_PPC64LE_LDFLAGS)" \
+	go build -tags dnp3_ffi,netgo -trimpath -ldflags="-s -w -extldflags '-static'" \
+	  -o bin/go104-linux-ppc64le-ffi ./cmd/server
+	@echo "Built bin/go104-linux-ppc64le-ffi (real opendnp3 DNP3 master, static)"
+
+verify-ppc64le:
+	@file bin/go104-linux-ppc64le-ffi 2>/dev/null | grep -q "PowerPC" || { echo "ERROR: bin/go104-linux-ppc64le-ffi missing or not ppc64le — run 'make release-ppc64le-ffi' first"; exit 1; }
+	@file bin/go104-linux-ppc64le-ffi | grep -q "statically linked" || echo "WARN: not statically linked — check CGO/toolchain"
+	@file bin/go104-linux-ppc64le-ffi; ls -lh bin/go104-linux-ppc64le-ffi
+
 # ── Cross-build preflight checks ──────────────────────────────────────────────
 check-dnp3-arm:
 	@if [ ! -f $(DNP3_ARM_DIR)/include/opendnp3/DNP3Manager.h ] || [ ! -f $(DNP3_ARM_DIR)/lib/libopendnp3.a ]; then \
@@ -143,6 +169,20 @@ check-arm-toolchain:
 	@if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then \
 		echo "ERROR: arm-linux-gnueabihf-gcc not found."; \
 		echo "  Install on Debian/Ubuntu: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf"; \
+		exit 1; \
+	fi
+
+check-dnp3-ppc64le:
+	@if [ ! -f $(DNP3_PPC64LE_DIR)/include/opendnp3/DNP3Manager.h ] || [ ! -f $(DNP3_PPC64LE_DIR)/lib/libopendnp3.a ]; then \
+		echo "ERROR: missing $(DNP3_PPC64LE_DIR)/{include/opendnp3/DNP3Manager.h,lib/libopendnp3.a}"; \
+		echo "  Vendor it: cd $(GODNP3_DIR) && make opendnp3-vendor-ppc64le"; \
+		exit 1; \
+	fi
+
+check-ppc64le-toolchain:
+	@if ! command -v powerpc64le-linux-gnu-g++ >/dev/null 2>&1; then \
+		echo "ERROR: powerpc64le-linux-gnu-g++ not found."; \
+		echo "  Install on Debian/Ubuntu: sudo apt install gcc-powerpc64le-linux-gnu g++-powerpc64le-linux-gnu"; \
 		exit 1; \
 	fi
 
@@ -164,6 +204,11 @@ image: frontend
 image-save: image
 	docker save $(IMAGE) -o $(TARBALL)
 	@echo "Saved $(IMAGE) → $(TARBALL)"
+
+# Same scratch container, but with the REAL DNP3 master (static FFI binary) so
+# the POWER deployment can poll DNP3 outstations, not just IEC-104.
+image-ffi: release-ppc64le-ffi
+	docker build --platform linux/ppc64le -f Dockerfile.ffi -t $(IMAGE) .
 
 # ── Development helpers ───────────────────────────────────────────────────────
 
