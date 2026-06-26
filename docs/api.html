@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go104 — API Reference</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#9FCF67; --anchor:#58a6ff;
+    --get:#3fb950; --post:#58a6ff; --put:#d29922; --del:#f85149; --ws:#bc8cff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.55;font-size:15px}
+  a{color:var(--anchor);text-decoration:none} a:hover{text-decoration:underline}
+  code,pre{font-family:var(--mono)}
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  /* sidebar */
+  nav{position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;width:248px;
+      padding:24px 14px;border-right:1px solid var(--line);background:var(--panel);flex:none}
+  nav h1{font-size:18px;margin:0 0 2px;color:#fff}
+  nav .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+  nav a{display:block;color:var(--muted);padding:4px 8px;border-radius:6px;font-size:13.5px}
+  nav a:hover{background:var(--panel2);color:var(--txt);text-decoration:none}
+  nav .grp{color:#fff;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:16px 8px 6px}
+  /* main */
+  main{flex:1;min-width:0;padding:34px 40px 120px}
+  h2{font-size:24px;margin:46px 0 6px;padding-top:10px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none;margin-top:0}
+  h3{font-size:16px;margin:26px 0 8px;color:#fff}
+  p{color:#cdd6e0} .muted{color:var(--muted)}
+  .lead{font-size:15.5px;color:#cdd6e0;max-width:74ch}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#fff;font-weight:600}
+  td code{color:var(--accent)}
+  pre{background:#0a0e14;border:1px solid var(--line);border-radius:8px;padding:13px 15px;overflow-x:auto;font-size:13px;margin:10px 0}
+  .ep{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 18px 16px;margin:16px 0}
+  .eph{display:flex;align-items:center;gap:11px;font-family:var(--mono);font-size:15px;margin:14px 0 6px;flex-wrap:wrap}
+  .eph .path{color:#fff;font-weight:600}
+  .m{font-weight:700;font-size:11px;padding:3px 9px;border-radius:5px;letter-spacing:.04em;color:#04130a}
+  .m.get{background:var(--get)} .m.post{background:var(--post);color:#04122b}
+  .m.put{background:var(--put);color:#1a1303} .m.del{background:var(--del);color:#fff} .m.ws{background:var(--ws);color:#1a0b2e}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted)}
+  .note{border-left:3px solid var(--accent);background:rgba(159,207,103,.07);padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0}
+  .warn{border-left:3px solid var(--del);background:rgba(248,81,73,.08);padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0}
+  .rec{border-left:3px solid var(--ws);background:rgba(188,140,255,.08);padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0}
+  .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-left:6px}
+  .badge-rec{background:var(--ws);color:#1a0b2e;font-weight:700;font-size:10px;padding:2px 7px;border-radius:5px;letter-spacing:.05em}
+  hr{border:none;border-top:1px solid var(--line);margin:30px 0}
+  footer{color:var(--muted);font-size:12.5px;margin-top:40px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <h1>go104 API</h1>
+  <div class="sub">IEC&nbsp;60870-5-104 &middot; DNP3 master console</div>
+  <a href="#overview">Overview</a>
+  <a href="#conventions">Conventions &amp; auth</a>
+  <div class="grp">REST</div>
+  <a href="#lines">Lines</a>
+  <a href="#signals">Signals</a>
+  <a href="#monitor">Monitor (live values)</a>
+  <a href="#commands">Commands (control)</a>
+  <a href="#history">History</a>
+  <a href="#scada">SCADA views</a>
+  <div class="grp">Realtime</div>
+  <a href="#ws">WebSocket</a>
+  <div class="grp">Reference</div>
+  <a href="#models">Data models</a>
+  <div class="grp">Recommended</div>
+  <a href="#obs">Observability API</a>
+  <a href="#security">Security notes</a>
+</nav>
+
+<main>
+<h2 id="overview">go104 API Reference</h2>
+<p class="lead">go104 is an IEC&nbsp;60870-5-104 + DNP3 <strong>master / SCADA console</strong>. It polls field
+RTUs/outstations, keeps current values in an in-memory RTDB, serves a Vue HMI, and pushes live updates over
+WebSocket. This document covers every HTTP endpoint and the WebSocket stream, plus a recommended
+observability surface that is <em>not yet implemented</em>.</p>
+<table>
+  <tr><th>Base URL</th><td><code>http://&lt;host&gt;:8080</code> &nbsp;(<code>--port</code> / <code>$HTTP_PORT</code>; soak uses 8092)</td></tr>
+  <tr><th>API prefix</th><td><code>/api</code> for REST &middot; <code>/ws</code> for WebSocket &middot; <code>/</code> serves the embedded SPA</td></tr>
+  <tr><th>Content type</th><td><code>application/json</code> (request &amp; response)</td></tr>
+  <tr><th>Router</th><td>chi v5 &middot; middleware: <code>RealIP</code>, <code>Recoverer</code>, CORS</td></tr>
+</table>
+
+<h2 id="conventions">Conventions &amp; auth</h2>
+<h3>Response envelope</h3>
+<p>Success returns the resource (or an action result object) with HTTP <code>200</code>. Errors return
+<code>{ "error": "&lt;message&gt;" }</code> with the relevant status code.</p>
+<table>
+<tr><th>Status</th><th>Meaning</th></tr>
+<tr><td><code>200 OK</code></td><td>Success (all success paths use 200, incl. create)</td></tr>
+<tr><td><code>400 Bad Request</code></td><td>Invalid body / missing required field / driver rejected command</td></tr>
+<tr><td><code>404 Not Found</code></td><td>Resource id does not exist</td></tr>
+<tr><td><code>409 Conflict</code></td><td>e.g. starting a line that is already running</td></tr>
+<tr><td><code>500</code></td><td>Store / driver internal error</td></tr>
+</table>
+<div class="warn"><strong>Authentication: none.</strong> The API has <em>no</em> auth, and CORS is
+<code>AllowedOrigins:["*"]</code>. Any client with network reach can read values <em>and issue field
+control</em> (<a href="#commands">POST /api/commands</a>). Deploy only on an isolated/segmented OT network
+until identity + authorization are added — see <a href="#security">Security notes</a>.</div>
+
+<!-- ───────────────────────── LINES ───────────────────────── -->
+<h2 id="lines">Lines</h2>
+<p>A <em>line</em> is a connection to a field device: an IEC-104 server or a DNP3 outstation
+(<code>protocol</code> = <code>iec104</code> | <code>dnp3</code>). See the <a href="#m-line">Line model</a>.</p>
+
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/api/lines</span></div>
+  <p>List all lines with live runtime fields (<code>state</code>, <code>rx_count</code>, <code>tx_count</code>, <code>addr</code>).</p>
+  <pre>200 → [ { "id":1,"name":"RTU-01","protocol":"dnp3","host":"10.0.0.5","port":20000,
+          "dnp3_outstation_addr":1024,"dnp3_master_addr":1,"gi_interval_s":30,
+          "enabled":true,"state":"ACTIVE","rx_count":1820,"tx_count":54,"addr":"10.0.0.5:20000" } ]</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/lines</span></div>
+  <p>Create a line. Body = <a href="#m-line">Line</a> (config fields). Empty <code>protocol</code> defaults to <code>iec104</code>.</p>
+  <pre>body → { "name":"RTU-01","protocol":"dnp3","host":"10.0.0.5","port":20000,
+         "dnp3_outstation_addr":1024,"dnp3_master_addr":1,"gi_interval_s":30,"enabled":true }
+200  → &lt;the created Line&gt;</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m put">PUT</span><span class="path">/api/lines/{id}</span></div>
+  <p>Update a line. Body = <a href="#m-line">Line</a>. Returns the updated record.</p>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m del">DELETE</span><span class="path">/api/lines/{id}</span></div>
+  <p>Delete a line (cascades its signals).</p>
+  <pre>200 → { "deleted": 1 }</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/lines/{id}/start</span></div>
+  <p>Connect &amp; start polling the line. <code>409</code> if already running.</p>
+  <pre>200 → { "started": 1 }</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/lines/{id}/stop</span></div>
+  <pre>200 → { "stopped": 1 }</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/lines/{id}/gi</span></div>
+  <p>Trigger a General Interrogation (IEC-104) / integrity poll (DNP3) — refreshes all points.</p>
+  <pre>200 → { "gi_triggered": 1 }</pre>
+</div>
+
+<!-- ───────────────────────── SIGNALS ───────────────────────── -->
+<h2 id="signals">Signals</h2>
+<p>A <em>signal</em> maps a point on a line (IEC-104 IOA, or a DNP3 <code>point_type</code>+index) to a named,
+scaled value. See the <a href="#m-signal">Signal model</a>.</p>
+
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/api/signals</span><span class="tag">?line_id=&lt;id&gt;</span></div>
+  <p>List signals for a line.</p>
+  <pre>200 → [ { "id":7,"line_id":2,"name":"Energy","ioa":0,"point_type":"analog",
+          "signal_type":"analog","unit":"kWh","scale":1,"offset":0 } ]</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/signals</span></div>
+  <p>Create a signal. Body = <a href="#m-signal">Signal</a> (must include <code>line_id</code>, <code>ioa</code>).</p>
+  <pre>200 → &lt;the created Signal&gt;</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m put">PUT</span><span class="path">/api/signals/{id}</span></div>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m del">DELETE</span><span class="path">/api/signals/{id}</span></div>
+  <pre>200 → { "deleted": 7 }</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/api/signals/all</span></div>
+  <p>All signals across every line, each with <code>line_name</code> populated — used by the SCADA element signal picker.</p>
+</div>
+
+<!-- ───────────────────────── MONITOR ───────────────────────── -->
+<h2 id="monitor">Monitor — live values</h2>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/api/monitor</span><span class="tag">?line_id=&lt;id&gt;</span></div>
+  <p>Current value of every signal on a line, from the in-memory RTDB. Signals with no data yet return
+     <code>quality: 128</code> (IV / invalid). See <a href="#m-datapoint">Datapoint</a>.</p>
+  <pre>200 → [ { "signal_id":7,"line_id":2,"ioa":0,"name":"Energy","signal_type":"analog",
+          "value":1234.5,"raw_value":1234.5,"quality":0,"timestamp":"2026-06-26T09:20:01Z" } ]</pre>
+  <div class="note">For a <em>live stream</em> use the <a href="#ws">WebSocket</a> — this endpoint is a point-in-time snapshot.</div>
+</div>
+
+<!-- ───────────────────────── COMMANDS ───────────────────────── -->
+<h2 id="commands">Commands — control output <span class="pill">writes to the field</span></h2>
+<div class="ep">
+  <div class="eph"><span class="m post">POST</span><span class="path">/api/commands</span></div>
+  <p>Issue a control to a field device (DNP3 DirectOperate / IEC-104 command). <code>line_id</code>,
+     <code>ioa</code> and <code>type_id</code> are required and must be non-zero.</p>
+  <table>
+    <tr><th>type_id</th><th>Meaning</th><th>value</th></tr>
+    <tr><td><code>45</code> C_SC_NA_1</td><td>Single command → binary output (CROB)</td><td>0 / 1</td></tr>
+    <tr><td><code>46</code> C_DC_NA_1</td><td>Double command → binary output</td><td>0–3</td></tr>
+    <tr><td><code>48/49/50</code></td><td>Setpoint (norm / scaled / float) → analog output</td><td>number</td></tr>
+  </table>
+  <pre>body → { "line_id":2, "ioa":1, "type_id":50, "value":4321, "select":false }
+200  → { "queued": true }
+400  → { "error": "line_id, ioa and type_id are required" }</pre>
+  <div class="warn"><strong>Unauthenticated control.</strong> This endpoint operates physical equipment with no
+    identity, authorization, confirmation, or audit trail. Treat as the top hardening priority.</div>
+</div>
+
+<!-- ───────────────────────── HISTORY ───────────────────────── -->
+<h2 id="history">History</h2>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/api/signals/{id}/history</span>
+    <span class="tag">?from=&amp;to=&amp;limit=</span></div>
+  <p>Recent trend for one signal, from the in-memory ring buffer (not persisted; bounded by
+     <code>GO104_HISTORY_POINTS</code>, default 2000/signal).</p>
+  <table>
+    <tr><th>Query</th><th>Default</th><th>Notes</th></tr>
+    <tr><td><code>from</code></td><td>now − 3600</td><td>Unix epoch seconds (float)</td></tr>
+    <tr><td><code>to</code></td><td>now</td><td>Unix epoch seconds (float)</td></tr>
+    <tr><td><code>limit</code></td><td>2000</td><td>clamped to 5000 by the store</td></tr>
+  </table>
+  <pre>200 → [ { "ts":1782470401.5, "value":1234.5, "quality":0 } ]</pre>
+</div>
+
+<!-- ───────────────────────── SCADA ───────────────────────── -->
+<h2 id="scada">SCADA views</h2>
+<p>Named P&amp;ID diagrams (elements + connector lines) stored as JSON. See <a href="#m-scada">ScadaView</a>.</p>
+<div class="ep"><div class="eph"><span class="m get">GET</span><span class="path">/api/scada/views</span></div><p>List all views.</p></div>
+<div class="ep"><div class="eph"><span class="m post">POST</span><span class="path">/api/scada/views</span></div><p>Create a view. Body = <a href="#m-scada">ScadaView</a>.</p></div>
+<div class="ep"><div class="eph"><span class="m get">GET</span><span class="path">/api/scada/views/{id}</span></div><p>Fetch one view (full element/line layout).</p></div>
+<div class="ep"><div class="eph"><span class="m put">PUT</span><span class="path">/api/scada/views/{id}</span></div><p>Replace a view (atomic layout save).</p></div>
+<div class="ep"><div class="eph"><span class="m del">DELETE</span><span class="path">/api/scada/views/{id}</span></div><pre>200 → { "deleted": 3 }</pre></div>
+
+<!-- ───────────────────────── WS ───────────────────────── -->
+<h2 id="ws">WebSocket</h2>
+<div class="ep">
+  <div class="eph"><span class="m ws">WS</span><span class="path">/ws</span></div>
+  <p>Server-push stream of live events. Every message is a JSON object with a <code>type</code> field.
+     There is no client→server protocol (read-only stream).</p>
+  <table>
+    <tr><th><code>type</code></th><th>Payload</th><th>Fired when</th></tr>
+    <tr><td><code>datapoint</code></td><td>full value: <code>signal_id, line_id, ioa, name, signal_type, type_id, unit, value, raw_value, quality, quality_ok, timestamp, received_at</code></td><td>a new value arrives</td></tr>
+    <tr><td><code>line_status</code></td><td><code>line_id, state, rx_count, tx_count, addr</code></td><td>connection state change</td></tr>
+    <tr><td><code>gi_start</code></td><td><code>line_id</code></td><td>GI / integrity poll begins</td></tr>
+    <tr><td><code>gi_complete</code></td><td><code>line_id</code></td><td>GI / integrity poll done</td></tr>
+    <tr><td><code>signal_stale</code></td><td><code>signal_id, line_id</code></td><td>no fresh data within timeout</td></tr>
+  </table>
+  <pre>{ "type":"datapoint","signal_id":7,"line_id":2,"ioa":0,"name":"Energy",
+  "value":1234.5,"quality":0,"quality_ok":true,"timestamp":"2026-06-26T09:20:01Z" }</pre>
+</div>
+
+<!-- ───────────────────────── MODELS ───────────────────────── -->
+<h2 id="models">Data models</h2>
+
+<h3 id="m-line">Line</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+<tr><td>id</td><td>int</td><td>read-only</td></tr>
+<tr><td>name</td><td>string</td><td>required</td></tr>
+<tr><td>protocol</td><td>string</td><td><code>iec104</code> (default) | <code>dnp3</code></td></tr>
+<tr><td>host, port</td><td>string,int</td><td>IEC-104: 2404 · DNP3: 20000</td></tr>
+<tr><td>common_address, k, w, t1_ms, t2_ms, t3_ms</td><td>int</td><td>IEC-104 link params</td></tr>
+<tr><td>dnp3_outstation_addr, dnp3_master_addr</td><td>int</td><td>DNP3 only (typ. 1024 / 1)</td></tr>
+<tr><td>gi_interval_s</td><td>int</td><td>GI / integrity-poll interval (0 = off)</td></tr>
+<tr><td>enabled</td><td>bool</td><td>auto-start on boot</td></tr>
+<tr><td>state, rx_count, tx_count, addr</td><td>—</td><td>runtime, not persisted</td></tr>
+</table>
+
+<h3 id="m-signal">Signal</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+<tr><td>id, line_id</td><td>int</td><td></td></tr>
+<tr><td>name</td><td>string</td><td>required</td></tr>
+<tr><td>ioa</td><td>int</td><td>IEC-104 IOA, or DNP3 point index</td></tr>
+<tr><td>type_id</td><td>int</td><td>IEC-104 ASDU type id (ignored for DNP3)</td></tr>
+<tr><td>point_type</td><td>string</td><td>DNP3 group: <code>binary</code>, <code>double_bit_binary</code>, <code>binary_output_status</code>, <code>counter</code>, <code>frozen_counter</code>, <code>analog</code>, <code>analog_output_status</code></td></tr>
+<tr><td>signal_type</td><td>string</td><td><code>digital</code> | <code>analog</code></td></tr>
+<tr><td>unit, scale, offset</td><td>string,float,float</td><td>value = raw·scale + offset</td></tr>
+</table>
+
+<h3 id="m-datapoint">Datapoint</h3>
+<p><code>signal_id, line_id, ioa, name, signal_type, type_id, unit, value, raw_value, quality, timestamp, received_at</code>.
+<code>quality</code> is an IEC-104-style byte — bit <code>0x80</code> = IV (invalid), <code>0x10</code> = BL (blocked); <code>0</code> = good.</p>
+
+<h3 id="m-history">HistoryPoint</h3>
+<p><code>{ ts: float (unix s), value: float, quality: uint8 }</code></p>
+
+<h3 id="m-scada">ScadaView</h3>
+<p><code>{ id, name, width, height, elements: ScadaElement[], lines: ScadaLine[], updated_at }</code> — elements/lines stored as JSON.</p>
+
+<!-- ───────────────────────── OBSERVABILITY ───────────────────────── -->
+<h2 id="obs">Observability API &nbsp;<span class="badge-rec">RECOMMENDED — NOT YET IMPLEMENTED</span></h2>
+<p class="lead">go104 currently emits structured <code>slog</code> logs and the live WebSocket, but exposes no
+machine-scrapable health or metrics surface. For production/industrial operation, add the four
+endpoints below. They are the de-facto standard for Go services (Prometheus + Kubernetes-style probes)
+and integrate directly with Grafana, Alertmanager, and OT monitoring stacks.</p>
+
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/healthz</span><span class="tag">liveness</span></div>
+  <p>Process is up. Always <code>200 "ok"</code> unless the event loop is wedged. Used by orchestrators to restart a hung process.</p>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/readyz</span><span class="tag">readiness</span></div>
+  <p>Ready to serve: store reachable (<code>db.PingContext</code>) and config loaded. <code>200</code> ready / <code>503</code> not. Gate traffic/scrapes on this.</p>
+  <pre>200 → { "ready": true, "store": "ok", "lines_configured": 2, "lines_active": 2 }</pre>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/metrics</span><span class="tag">Prometheus text/plain</span></div>
+  <p>Prometheus exposition (<code>github.com/prometheus/client_golang/promhttp</code>). Include the default Go
+     runtime + process collectors, plus the go104-specific series below.</p>
+  <pre># build &amp; runtime (free with client_golang)
+go104_build_info{version,commit,go_version} 1
+go_goroutines, go_memstats_*, process_resident_memory_bytes, process_cpu_seconds_total
+
+# field acquisition  (label by line/protocol — NOT per-signal: cardinality)
+go104_line_state{line,protocol}                 # 0 disc · 1 connecting · 2 active · 3 stopped
+go104_line_rx_frames_total{line}                # counter
+go104_line_tx_frames_total{line}                # counter
+go104_ingest_samples_total{line,protocol}       # counter — the throughput SLI
+go104_ingest_quality_total{line,quality}        # counter — good vs IV/BL
+go104_gi_total{line,result}                     # counter — GI / integrity polls
+go104_signal_stale{line}                        # gauge — stale points
+
+# control (audit-grade)
+go104_commands_total{line,type_id,result}       # counter — every field control
+
+# store / RTDB  (proves the hot-path-off-SQLite design)
+go104_rtdb_signals                              # gauge — points in the in-memory RTDB
+go104_history_ring_points_total                 # counter — appends to the history ring
+go104_snapshot_duration_seconds                 # histogram — periodic current-value persist
+go104_snapshot_rows                             # gauge — rows in the last snapshot
+go104_snapshot_errors_total                     # counter
+
+# transport
+go104_ws_clients                                # gauge — connected WebSocket peers
+go104_http_requests_total{route,method,code}    # counter</pre>
+  <div class="rec"><strong>Why these:</strong> <code>go104_ingest_samples_total</code> is the capacity SLI proven in
+    load testing (single-writer ceiling); <code>go104_snapshot_*</code> and the absence of a per-sample DB write
+    series confirm the SQLite hot-path was removed; <code>go104_commands_total</code> gives an audit/rate signal on
+    field control; <code>go104_line_state</code> drives connection alerts.</div>
+</div>
+<div class="ep">
+  <div class="eph"><span class="m get">GET</span><span class="path">/version</span><span class="tag">build info</span></div>
+  <pre>200 → { "version":"1.4.0", "commit":"ca2ab76", "built":"2026-06-26T...", "go":"go1.26.0" }</pre>
+</div>
+
+<h3>Wiring (sketch)</h3>
+<pre>import "github.com/prometheus/client_golang/prometheus/promhttp"
+
+mux.Handle("/metrics", promhttp.Handler())          // default registry + go/process collectors
+mux.HandleFunc("/healthz", func(w,r){ w.Write([]byte("ok")) })
+mux.HandleFunc("/readyz",  readyHandler(store, master))
+mux.HandleFunc("/version", versionHandler(buildInfo))
+
+// in the line worker hot path:
+ingestSamples.WithLabelValues(line, proto).Inc()    // prometheus.CounterVec</pre>
+
+<div class="rec"><strong>Beyond metrics (optional, advanced):</strong>
+  <ul>
+    <li><strong>OpenTelemetry traces</strong> on the SCADA→field control path (<code>POST /api/commands</code> →
+        master → field write → read-back) for end-to-end latency + a distributed audit trail.</li>
+    <li><strong>Request IDs</strong>: add chi <code>middleware.RequestID</code> and include it in <code>slog</code>
+        lines so logs correlate with traces/metrics.</li>
+    <li><strong>Structured audit log</strong> for every control command (who/what/when/result) — distinct from
+        operational logs, retained for compliance (IEC 62443).</li>
+  </ul>
+</div>
+<div class="warn"><strong>Expose carefully.</strong> <code>/metrics</code> leaks topology (line names, point counts) and
+  <code>/readyz</code> leaks internal state. Bind them to a management interface / separate port, scrape over the
+  monitoring VLAN, and protect with the same auth/network controls recommended for the main API.</div>
+
+<!-- ───────────────────────── SECURITY ───────────────────────── -->
+<h2 id="security">Security notes</h2>
+<table>
+<tr><th>Area</th><th>Current</th><th>Recommendation</th></tr>
+<tr><td>API auth</td><td><span style="color:var(--del)">none</span></td><td>mTLS or OIDC/JWT + RBAC; gate <code>/api/commands</code> hardest</td></tr>
+<tr><td>CORS</td><td><code>AllowedOrigins:["*"]</code></td><td>restrict to known operator origins</td></tr>
+<tr><td>Control audit</td><td>none</td><td>immutable audit log + select-before-operate confirm</td></tr>
+<tr><td>Transport</td><td>plaintext IEC-104 / DNP3 (TLS=OFF, no DNP3-SA)</td><td>DNP3-SA / TLS where peers allow, else strict network isolation; outstations by IP</td></tr>
+<tr><td>Secrets / data at rest</td><td>SQLite unencrypted</td><td>file perms / SQLCipher for regulated sites</td></tr>
+</table>
+
+<footer>
+  go104 API reference · generated from <code>internal/api/router.go</code> + handlers ·
+  REST is implemented today; the <a href="#obs">Observability API</a> is a recommended addition.
+  Offline document — no external assets.
+</footer>
+</main>
+</div>
+</body>
+</html>
