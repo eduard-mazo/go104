@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"go104/internal/metrics"
 	"go104/internal/models"
 )
 
@@ -35,8 +36,15 @@ func (s *sqliteStore) snapshotLoop() {
 			return
 		case <-t.C:
 			s.flushCurrent()
+			metrics.RTDBSignals(s.countRTDB())
 		}
 	}
+}
+
+func (s *sqliteStore) countRTDB() int {
+	n := 0
+	s.dpCache.Range(func(_, _ any) bool { n++; return true })
+	return n
 }
 
 // flushCurrent persists the changed current values to SQLite in a single
@@ -52,10 +60,15 @@ func (s *sqliteStore) flushCurrent() {
 		return
 	}
 
+	start := time.Now()
+	rows, failed := 0, false
+	defer func() { metrics.Snapshot(time.Since(start).Seconds(), rows, failed) }()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
+		failed = true
 		s.remarkDirty(ids)
 		return
 	}
@@ -69,6 +82,7 @@ func (s *sqliteStore) flushCurrent() {
 		timestamp=excluded.timestamp,received_at=excluded.received_at`)
 	if err != nil {
 		_ = tx.Rollback()
+		failed = true
 		s.remarkDirty(ids)
 		return
 	}
@@ -84,10 +98,14 @@ func (s *sqliteStore) flushCurrent() {
 			dp.TypeID, dp.Unit, dp.Value, dp.RawValue, dp.Quality,
 			dp.Timestamp.UTC().Format(time.RFC3339Nano),
 			dp.ReceivedAt.UTC().Format(time.RFC3339Nano)); err != nil {
+			failed = true
 			s.dirty.Store(id, struct{}{}) // retry next round
+			continue
 		}
+		rows++
 	}
 	if err := tx.Commit(); err != nil {
+		failed = true
 		s.remarkDirty(ids)
 	}
 }

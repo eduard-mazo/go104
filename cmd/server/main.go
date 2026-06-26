@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -15,9 +18,13 @@ import (
 	"go104/internal/api"
 	"go104/internal/hub"
 	"go104/internal/iec104"
+	"go104/internal/metrics"
 	"go104/internal/store"
 	"go104/internal/ui"
 )
+
+// version is overridable at build time: -ldflags "-X main.version=1.4.0".
+var version = "dev"
 
 func main() {
 	// Flags take precedence over env vars, which take precedence over defaults.
@@ -32,6 +39,8 @@ func main() {
 
 	dbPath := pick(*dbFlag, env("DB_PATH", "go104.db"))
 	httpAddr := ":" + pick(*portFlag, env("HTTP_PORT", "8080"))
+
+	metrics.SetBuildInfo(version, vcsRevision(), runtime.Version())
 
 	// Store
 	st, err := store.New(dbPath)
@@ -56,6 +65,13 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", handlers.Router())
 	mux.Handle("/ws", handlers.Router())
+	// Observability surface (root-mounted; exact patterns win over "/").
+	mux.Handle("/metrics", metrics.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok")) //nolint:errcheck
+	})
+	mux.HandleFunc("/readyz", readyHandler(st, master))
+	mux.HandleFunc("/version", versionHandler())
 	mux.Handle("/", spaHandler())
 
 	srv := &http.Server{
@@ -136,4 +152,50 @@ func pick(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// readyHandler reports readiness: store reachable + line counts. 200 ready / 503 not.
+func readyHandler(st store.Store, m *iec104.Master) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		lines, err := st.ListLines()
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]any{"ready": false, "store": err.Error()}) //nolint:errcheck
+			return
+		}
+		active := 0
+		for _, l := range lines {
+			if m.IsRunning(l.ID) {
+				active++
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"ready": true, "store": "ok",
+			"lines_configured": len(lines), "lines_active": active,
+		})
+	}
+}
+
+func versionHandler() http.HandlerFunc {
+	body := map[string]any{"version": version, "commit": vcsRevision(), "go": runtime.Version()}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(body) //nolint:errcheck
+	}
+}
+
+// vcsRevision returns the embedded git commit (short) if the binary was built in a repo.
+func vcsRevision() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" {
+				if len(s.Value) > 12 {
+					return s.Value[:12]
+				}
+				return s.Value
+			}
+		}
+	}
+	return "unknown"
 }

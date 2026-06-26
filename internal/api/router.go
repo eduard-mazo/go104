@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -9,6 +10,7 @@ import (
 
 	"go104/internal/hub"
 	"go104/internal/iec104"
+	"go104/internal/metrics"
 	"go104/internal/store"
 )
 
@@ -33,6 +35,7 @@ func (h *Handlers) Router() http.Handler {
 	}))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
+	r.Use(metricsMiddleware)
 
 	r.Route("/api", func(r chi.Router) {
 		// Lines
@@ -74,4 +77,19 @@ func (h *Handlers) Router() http.Handler {
 	r.Get("/ws", h.wsHandler)
 
 	return r
+}
+
+// metricsMiddleware records request count + duration per matched route (chi
+// pattern, not raw path → bounded cardinality).
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		start := time.Now()
+		next.ServeHTTP(ww, r)
+		route := chi.RouteContext(r.Context()).RoutePattern()
+		if route == "" {
+			route = "other"
+		}
+		metrics.HTTPRequest(route, r.Method, ww.Status(), time.Since(start).Seconds())
+	})
 }

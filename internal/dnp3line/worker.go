@@ -22,6 +22,7 @@ import (
 	godnp3 "goDnp3"
 
 	"go104/internal/hub"
+	"go104/internal/metrics"
 	"go104/internal/models"
 	"go104/internal/store"
 )
@@ -205,6 +206,7 @@ func (w *Worker) OnMeasurement(m godnp3.Measurement) {
 		slog.Warn("[DNP3] insert history", "signal", sig.ID, "err", err)
 	}
 	w.h.BroadcastDatapoint(dp)
+	metrics.IngestSample(w.cfg.Name, "dnp3", dp.QualityOK())
 }
 
 func (w *Worker) OnStatusChange(s godnp3.Status) {
@@ -249,6 +251,7 @@ func (w *Worker) setState(s models.LineState) {
 	w.state = s
 	w.mu.Unlock()
 	w.h.BroadcastLineStatus(w.cfg.ID, string(s), w.rxCount.Load(), 0, w.addr())
+	metrics.LineState(w.cfg.Name, "dnp3", string(s))
 	slog.Info("[DNP3] state change", "id", w.cfg.ID, "name", w.cfg.Name, "state", s, "addr", w.addr())
 }
 

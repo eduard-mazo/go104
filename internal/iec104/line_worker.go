@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go104/internal/hub"
+	"go104/internal/metrics"
 	"go104/internal/models"
 	"go104/internal/store"
 )
@@ -113,6 +114,7 @@ func (w *LineWorker) setState(s models.LineState) {
 	w.mu.Unlock()
 	addr := fmt.Sprintf("%s:%d", w.cfg.Host, w.cfg.Port)
 	w.h.BroadcastLineStatus(w.cfg.ID, string(s), w.rxCount.Load(), w.txCount.Load(), addr)
+	metrics.LineState(w.cfg.Name, "iec104", string(s))
 	slog.Info("[LINE] state change", "id", w.cfg.ID, "name", w.cfg.Name, "state", s, "addr", addr)
 }
 
@@ -468,6 +470,7 @@ func (w *LineWorker) processASDU(data []byte, giPending *bool) error {
 			slog.Warn("[LINE] insert history", "signal", sig.ID, "err", err)
 		}
 		w.h.BroadcastDatapoint(dp)
+		metrics.IngestSample(w.cfg.Name, "iec104", dp.QualityOK())
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"go104/internal/metrics"
 	"go104/internal/models"
 )
 
@@ -67,10 +68,12 @@ func (h *Hub) Run() {
 		select {
 		case c := <-h.register:
 			h.clients[c] = struct{}{}
+			metrics.WSClients(len(h.clients))
 		case c := <-h.unregister:
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
 				close(c.send)
+				metrics.WSClients(len(h.clients))
 			}
 		case msg := <-h.broadcast:
 			for c := range h.clients {

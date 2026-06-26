@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 
+	"go104/internal/metrics"
 	"go104/internal/models"
 )
 
@@ -65,6 +66,7 @@ func (s *sqliteStore) InsertHistory(signalID int64, ts float64, value float64, q
 	b.buf[b.n%c] = models.HistoryPoint{TS: ts, Value: value, Quality: quality}
 	b.n++
 	b.mu.Unlock()
+	metrics.HistoryAppend()
 	return nil
 }
 

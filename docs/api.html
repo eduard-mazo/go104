@@ -49,6 +49,7 @@
   .rec{border-left:3px solid var(--ws);background:rgba(188,140,255,.08);padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0}
   .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-left:6px}
   .badge-rec{background:var(--ws);color:#1a0b2e;font-weight:700;font-size:10px;padding:2px 7px;border-radius:5px;letter-spacing:.05em}
+  .badge-impl{background:var(--get);color:#04130a;font-weight:700;font-size:10px;padding:2px 7px;border-radius:5px;letter-spacing:.05em}
   hr{border:none;border-top:1px solid var(--line);margin:30px 0}
   footer{color:var(--muted);font-size:12.5px;margin-top:40px;border-top:1px solid var(--line);padding-top:16px}
 </style>
@@ -71,7 +72,7 @@
   <a href="#ws">WebSocket</a>
   <div class="grp">Reference</div>
   <a href="#models">Data models</a>
-  <div class="grp">Recommended</div>
+  <div class="grp">Operations</div>
   <a href="#obs">Observability API</a>
   <a href="#security">Security notes</a>
 </nav>
@@ -290,11 +291,12 @@ scaled value. See the <a href="#m-signal">Signal model</a>.</p>
 <p><code>{ id, name, width, height, elements: ScadaElement[], lines: ScadaLine[], updated_at }</code> — elements/lines stored as JSON.</p>
 
 <!-- ───────────────────────── OBSERVABILITY ───────────────────────── -->
-<h2 id="obs">Observability API &nbsp;<span class="badge-rec">RECOMMENDED — NOT YET IMPLEMENTED</span></h2>
-<p class="lead">go104 currently emits structured <code>slog</code> logs and the live WebSocket, but exposes no
-machine-scrapable health or metrics surface. For production/industrial operation, add the four
-endpoints below. They are the de-facto standard for Go services (Prometheus + Kubernetes-style probes)
-and integrate directly with Grafana, Alertmanager, and OT monitoring stacks.</p>
+<h2 id="obs">Observability API &nbsp;<span class="badge-impl">IMPLEMENTED</span></h2>
+<p class="lead">go104 exposes a machine-scrapable observability surface alongside its structured
+<code>slog</code> logs and the live WebSocket: four root-mounted endpoints following the de-facto
+standard for Go services (Prometheus + Kubernetes-style probes), which integrate directly with Grafana,
+Alertmanager, and OT monitoring stacks. The Prometheus series below are emitted by
+<code>internal/metrics</code>.</p>
 
 <div class="ep">
   <div class="eph"><span class="m get">GET</span><span class="path">/healthz</span><span class="tag">liveness</span></div>
@@ -342,7 +344,8 @@ go104_http_requests_total{route,method,code}    # counter</pre>
 </div>
 <div class="ep">
   <div class="eph"><span class="m get">GET</span><span class="path">/version</span><span class="tag">build info</span></div>
-  <pre>200 → { "version":"1.4.0", "commit":"ca2ab76", "built":"2026-06-26T...", "go":"go1.26.0" }</pre>
+  <pre>200 → { "version":"dev", "commit":"757225d3", "go":"go1.26.0" }
+  &nbsp;&nbsp;&nbsp;&nbsp;# version via -ldflags "-X main.version=…"; commit auto-embedded from vcs.revision</pre>
 </div>
 
 <h3>Wiring (sketch)</h3>
@@ -383,8 +386,8 @@ ingestSamples.WithLabelValues(line, proto).Inc()    // prometheus.CounterVec</pr
 
 <footer>
   go104 API reference · generated from <code>internal/api/router.go</code> + handlers ·
-  REST is implemented today; the <a href="#obs">Observability API</a> is a recommended addition.
-  Offline document — no external assets.
+  REST + the <a href="#obs">Observability API</a> (<code>/healthz</code>, <code>/readyz</code>,
+  <code>/metrics</code>, <code>/version</code>) are implemented. Offline document — no external assets.
 </footer>
 </main>
 </div>
