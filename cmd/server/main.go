@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -19,12 +20,18 @@ import (
 )
 
 func main() {
+	// Flags take precedence over env vars, which take precedence over defaults.
+	// Empty default means "fall through to env/default" so the env path still works.
+	portFlag := flag.String("port", "", "HTTP listen port (overrides $HTTP_PORT; default 8080)")
+	dbFlag := flag.String("db", "", "SQLite database path (overrides $DB_PATH; default go104.db)")
+	flag.Parse()
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
 
-	dbPath := env("DB_PATH", "go104.db")
-	httpAddr := ":" + env("HTTP_PORT", "8080")
+	dbPath := pick(*dbFlag, env("DB_PATH", "go104.db"))
+	httpAddr := ":" + pick(*portFlag, env("HTTP_PORT", "8080"))
 
 	// Store
 	st, err := store.New(dbPath)
@@ -121,4 +128,12 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// pick returns the first non-empty string (flag → env/default precedence).
+func pick(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
