@@ -1,5 +1,6 @@
 .PHONY: all build backend backend-ffi frontend dev dev-backend dev-frontend run run-ffi test lint clean tidy docker \
-        release release-amd64 release-ppc64le image image-save
+        release release-amd64 release-ppc64le release-icr release-icr-ffi verify-arm \
+        check-dnp3-arm check-arm-toolchain image image-save
 
 BINARY   := ./bin/go104
 WEB_DIR  := ./web
@@ -14,6 +15,14 @@ DNP3_TRIPLE   ?= x86_64-unknown-linux-gnu
 DNP3_DIR      := $(abspath $(GODNP3_DIR))/third_party/opendnp3/$(DNP3_TRIPLE)
 DNP3_CXXFLAGS := -std=c++17 -I$(DNP3_DIR)/include
 DNP3_LDFLAGS  := -L$(DNP3_DIR)/lib -lopendnp3 -lssl -lcrypto -lstdc++ -lpthread -lm -ldl
+
+# ARM/v7 cross (Advantech ICR-3232). The armv7 opendnp3 is vendored WITHOUT TLS,
+# so the link omits -lssl/-lcrypto; libstdc++ is pulled statically (-l:libstdc++.a)
+# so the fully-static binary needs no C++ runtime on the device.
+DNP3_ARM_TRIPLE   ?= armv7-unknown-linux-gnueabihf
+DNP3_ARM_DIR      := $(abspath $(GODNP3_DIR))/third_party/opendnp3/$(DNP3_ARM_TRIPLE)
+DNP3_ARM_CXXFLAGS := -std=c++17 -I$(DNP3_ARM_DIR)/include
+DNP3_ARM_LDFLAGS  := -L$(DNP3_ARM_DIR)/lib -lopendnp3 -l:libstdc++.a -lpthread -lm -ldl -static-libgcc
 
 # Container image
 IMAGE    ?= localhost/go104:ppc64le
@@ -84,6 +93,58 @@ release-ppc64le: frontend
 	  go build -ldflags="$(LDFLAGS)" \
 	  -o bin/go104-linux-ppc64le ./cmd/server
 	@echo "Built bin/go104-linux-ppc64le"
+
+# ── ICR-3232 (Advantech, linux/arm/v7) ────────────────────────────────────────
+# Two flavors mirror the edge gateway: a pure-Go stub (IEC-104 master only) and a
+# fully static cgo build with the real opendnp3 DNP3 master.
+
+# Pure-Go stub: IEC-104 master is fully functional; DNP3 lines use the goDnp3 stub
+# (they connect to nothing). CGO off → statically linked automatically.
+release-icr: frontend
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
+	  go build -trimpath -ldflags="$(LDFLAGS)" \
+	  -o bin/go104-linux-armv7 ./cmd/server
+	@echo "Built bin/go104-linux-armv7 (stub DNP3 — IEC-104 master only)"
+
+# Real opendnp3 DNP3 master, FULLY static-linked for the ICR-3232. cgo would
+# otherwise link the build-host glibc (Debian GLIBC_2.38), far newer than the ICR
+# firmware userland — a dynamic binary dies with "GLIBC_2.xx not found". The
+# -extldflags -static bakes glibc in; netgo gives a pure-Go DNS resolver so name
+# lookups don't need glibc NSS (configure outstations by IP — asio's getaddrinfo
+# still wants NSS otherwise). modernc.org/sqlite stays pure-Go.
+release-icr-ffi: check-dnp3-arm check-arm-toolchain frontend
+	@mkdir -p bin
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm GOARM=7 \
+	CC=arm-linux-gnueabihf-gcc \
+	CXX=arm-linux-gnueabihf-g++ \
+	CGO_CXXFLAGS="$(DNP3_ARM_CXXFLAGS)" \
+	CGO_LDFLAGS="$(DNP3_ARM_LDFLAGS)" \
+	go build -tags dnp3_ffi,netgo -trimpath -ldflags="-s -w -extldflags '-static'" \
+	  -o bin/go104-linux-armv7-ffi ./cmd/server
+	@echo "Built bin/go104-linux-armv7-ffi (real opendnp3 DNP3 master, static)"
+	@echo "Deploy: scp bin/go104-linux-armv7-ffi root@<icr-ip>:/root/  (no .so needed — opendnp3 is static-linked)"
+
+# Assert the cross-built FFI binary is a static ARM ELF before shipping.
+verify-arm:
+	@file bin/go104-linux-armv7-ffi 2>/dev/null | grep -q "ARM" || { echo "ERROR: bin/go104-linux-armv7-ffi missing or not ARM — run 'make release-icr-ffi' first"; exit 1; }
+	@file bin/go104-linux-armv7-ffi | grep -q "statically linked" || echo "WARN: not statically linked — check CGO/toolchain"
+	@file bin/go104-linux-armv7-ffi; ls -lh bin/go104-linux-armv7-ffi
+
+# ── Cross-build preflight checks ──────────────────────────────────────────────
+check-dnp3-arm:
+	@if [ ! -f $(DNP3_ARM_DIR)/include/opendnp3/DNP3Manager.h ] || [ ! -f $(DNP3_ARM_DIR)/lib/libopendnp3.a ]; then \
+		echo "ERROR: missing $(DNP3_ARM_DIR)/{include/opendnp3/DNP3Manager.h,lib/libopendnp3.a}"; \
+		echo "  Vendor it: cd $(GODNP3_DIR) && make opendnp3-vendor-arm"; \
+		exit 1; \
+	fi
+
+check-arm-toolchain:
+	@if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then \
+		echo "ERROR: arm-linux-gnueabihf-gcc not found."; \
+		echo "  Install on Debian/Ubuntu: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf"; \
+		exit 1; \
+	fi
 
 # ── Container (ppc64le, air-gapped) ─────────────────────────────────────────
 
