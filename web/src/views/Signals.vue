@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { linesAPI, signalsAPI, typeIDName, type Line, type Signal } from '@/api/client'
+import { computed, onMounted, ref, watch } from 'vue'
+import { linesAPI, signalsAPI, typeIDName, pointTypeLabel, type Line, type Signal } from '@/api/client'
 import { useSignalsStore } from '@/stores/signals'
 import SignalForm from '@/components/SignalForm.vue'
 import { Plus, Pencil, Trash2, Radio } from 'lucide-vue-next'
@@ -8,6 +8,9 @@ import { Plus, Pencil, Trash2, Radio } from 'lucide-vue-next'
 const store = useSignalsStore()
 const lines = ref<Line[]>([])
 const selectedLine = ref<number | null>(null)
+const selectedLineObj = computed(() => lines.value.find(l => l.id === selectedLine.value))
+const selectedProtocol = computed<'iec104' | 'dnp3'>(() =>
+  selectedLineObj.value?.protocol === 'dnp3' ? 'dnp3' : 'iec104')
 const showForm = ref(false)
 const editing = ref<Partial<Signal> | null>(null)
 
@@ -52,7 +55,7 @@ function onSaved() {
       <label class="text-sm text-muted-foreground font-semibold shrink-0">Line:</label>
       <select v-model.number="selectedLine" class="input-base w-64">
         <option v-for="l in lines" :key="l.id" :value="l.id">
-          {{ l.name }} ({{ l.host }}:{{ l.port }})
+          {{ l.name }} ({{ l.protocol === 'dnp3' ? 'DNP3' : 'IEC-104' }} · {{ l.host }}:{{ l.port }})
         </option>
       </select>
     </div>
@@ -67,8 +70,8 @@ function onSaved() {
         <thead>
           <tr>
             <th class="th">Name</th>
-            <th class="th">IOA</th>
-            <th class="th">TypeID</th>
+            <th class="th">{{ selectedProtocol === 'dnp3' ? 'Index' : 'IOA' }}</th>
+            <th class="th">Type / Point</th>
             <th class="th">Kind</th>
             <th class="th">Unit</th>
             <th class="th">Scale / Offset</th>
@@ -80,7 +83,9 @@ function onSaved() {
           <tr v-for="s in store.signals" :key="s.id" class="data-row">
             <td class="td font-semibold">{{ s.name }}</td>
             <td class="td tabular text-[color:var(--signal-wait)]">{{ s.ioa }}</td>
-            <td class="td text-xs font-mono text-muted-foreground">{{ typeIDName(s.type_id) }}</td>
+            <td class="td text-xs font-mono text-muted-foreground">
+              {{ s.point_type ? pointTypeLabel(s.point_type) : typeIDName(s.type_id) }}
+            </td>
             <td class="td">
               <span :class="s.signal_type === 'digital' ? 'badge-warn' : 'badge-muted'">
                 {{ s.signal_type }}
@@ -110,6 +115,7 @@ function onSaved() {
       v-model:open="showForm"
       :line-id="selectedLine ?? 0"
       :signal="editing"
+      :protocol="selectedProtocol"
       @saved="onSaved"
     />
   </div>

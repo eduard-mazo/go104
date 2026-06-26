@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { signalsAPI, TYPE_IDS, type Signal } from '@/api/client'
+import { computed, ref, watch } from 'vue'
+import { signalsAPI, TYPE_IDS, POINT_TYPES, pointTypeKind, type Signal } from '@/api/client'
 import { X } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
   lineId: number
   signal: Partial<Signal> | null
+  protocol?: 'iec104' | 'dnp3'
 }>()
 const emit = defineEmits<{
   'update:open': [v: boolean]
@@ -17,11 +18,15 @@ const form = ref<Partial<Signal>>({})
 const saving = ref(false)
 const error = ref('')
 
+const isDnp3 = computed(() => props.protocol === 'dnp3')
+
 watch(() => props.open, (v) => {
   if (v) {
     form.value = props.signal
       ? { ...props.signal }
-      : { line_id: props.lineId, type_id: 13, signal_type: 'analog', scale: 1, offset: 0, unit: '', description: '' }
+      : isDnp3.value
+        ? { line_id: props.lineId, point_type: 'analog', signal_type: 'analog', scale: 1, offset: 0, unit: '', description: '' }
+        : { line_id: props.lineId, type_id: 13, signal_type: 'analog', scale: 1, offset: 0, unit: '', description: '' }
     error.value = ''
   }
 })
@@ -31,9 +36,16 @@ function onTypeChange() {
   if (t) form.value.signal_type = t.kind as 'digital' | 'analog'
 }
 
+// DNP3: the object group fixes whether go104 stores the point as digital/analog.
+function onPointTypeChange() {
+  form.value.signal_type = pointTypeKind(form.value.point_type)
+}
+
 async function save() {
-  if (!form.value.name || !form.value.ioa) {
-    error.value = 'Name and IOA are required'
+  const ioa = form.value.ioa
+  const ioaMissing = ioa == null || (ioa as unknown as string) === '' || (!isDnp3.value && ioa === 0)
+  if (!form.value.name || ioaMissing) {
+    error.value = `Name and ${isDnp3.value ? 'Point Index' : 'IOA'} are required`
     return
   }
   saving.value = true
@@ -86,11 +98,14 @@ async function save() {
             </div>
 
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1">IOA (1–16777215) *</label>
-              <input v-model.number="form.ioa" type="number" min="1" max="16777215" class="input-base" />
+              <label class="block text-xs font-medium text-slate-400 mb-1">
+                {{ isDnp3 ? 'Point Index (0–65535) *' : 'IOA (1–16777215) *' }}
+              </label>
+              <input v-model.number="form.ioa" type="number"
+                :min="isDnp3 ? 0 : 1" :max="isDnp3 ? 65535 : 16777215" class="input-base" />
             </div>
 
-            <div>
+            <div v-if="!isDnp3">
               <label class="block text-xs font-medium text-slate-400 mb-1">TypeID *</label>
               <select v-model.number="form.type_id" @change="onTypeChange" class="input-base">
                 <option v-for="t in TYPE_IDS" :key="t.id" :value="t.id">
@@ -99,9 +114,19 @@ async function save() {
               </select>
             </div>
 
+            <div v-if="isDnp3">
+              <label class="block text-xs font-medium text-slate-400 mb-1">Point Type *</label>
+              <select v-model="form.point_type" @change="onPointTypeChange" class="input-base">
+                <option v-for="p in POINT_TYPES" :key="p.value" :value="p.value">
+                  {{ p.label }}
+                </option>
+              </select>
+            </div>
+
             <div>
               <label class="block text-xs font-medium text-slate-400 mb-1">Signal Type</label>
-              <select v-model="form.signal_type" class="input-base">
+              <select v-model="form.signal_type" :disabled="isDnp3"
+                class="input-base disabled:opacity-60" :title="isDnp3 ? 'Derived from the DNP3 point type' : ''">
                 <option value="analog">Analog</option>
                 <option value="digital">Digital</option>
               </select>

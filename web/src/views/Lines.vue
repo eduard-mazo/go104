@@ -55,7 +55,7 @@ function stateBadge(state: Line['state']) {
           <Plug class="w-5 h-5 text-[color:var(--epm-citrico)]" />
           Communication Lines
         </h1>
-        <p class="text-sm text-muted-foreground mt-0.5">IEC 104 master connections</p>
+        <p class="text-sm text-muted-foreground mt-0.5">IEC-104 / DNP3 master connections</p>
       </div>
       <button class="btn-primary shrink-0" @click="openAdd">
         <Plus class="w-4 h-4" /> <span class="hidden sm:inline">Add Line</span>
@@ -68,12 +68,13 @@ function stateBadge(state: Line['state']) {
       <div v-else-if="!store.lines.length" class="px-4 py-10 text-center text-muted-foreground text-sm">
         No lines configured. Click <b>Add Line</b> to get started.
       </div>
-      <table v-else class="table-base min-w-[640px]">
+      <table v-else class="table-base min-w-[760px]">
         <thead>
           <tr>
             <th class="th">Name</th>
+            <th class="th">Protocol</th>
             <th class="th">Host : Port</th>
-            <th class="th">CA</th>
+            <th class="th">CA / Addr</th>
             <th class="th">State</th>
             <th class="th">RX / TX</th>
             <th class="th">GI (s)</th>
@@ -83,8 +84,15 @@ function stateBadge(state: Line['state']) {
         <tbody>
           <tr v-for="l in store.lines" :key="l.id" class="data-row">
             <td class="td font-semibold">{{ l.name }}</td>
+            <td class="td">
+              <span :class="l.protocol === 'dnp3' ? 'badge-warn' : 'badge-muted'">
+                {{ l.protocol === 'dnp3' ? 'DNP3' : 'IEC-104' }}
+              </span>
+            </td>
             <td class="td font-mono text-sm text-muted-foreground">{{ l.host }}:{{ l.port }}</td>
-            <td class="td text-muted-foreground">{{ l.common_address }}</td>
+            <td class="td text-muted-foreground tabular text-xs">
+              {{ l.protocol === 'dnp3' ? `OS ${l.dnp3_outstation_addr} / M ${l.dnp3_master_addr}` : l.common_address }}
+            </td>
             <td class="td">
               <span :class="stateBadge(l.state)">{{ l.state }}</span>
             </td>

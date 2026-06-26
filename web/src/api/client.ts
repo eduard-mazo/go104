@@ -16,6 +16,12 @@ export interface Line {
   t2_ms: number
   t3_ms: number
   gi_interval_s: number
+  // Protocol driver: 'iec104' (default) or 'dnp3'. The dnp3_* fields apply only
+  // when protocol === 'dnp3'; host/port and gi_interval_s are shared (for DNP3,
+  // gi_interval_s is the integrity-poll interval).
+  protocol?: 'iec104' | 'dnp3'
+  dnp3_outstation_addr?: number
+  dnp3_master_addr?: number
   enabled: boolean
   created_at: string
   // runtime
@@ -36,6 +42,9 @@ export interface Signal {
   scale: number
   offset: number
   description: string
+  // DNP3 object group ('binary' | 'analog' | 'counter' | …); empty for IEC-104
+  // lines. For DNP3, `ioa` is reused as the point index within its group.
+  point_type?: string
   line_name?: string  // populated by /api/signals/all
 }
 
@@ -250,6 +259,27 @@ export const CMD_TYPE_IDS = [
 
 export function typeIDName(id: number): string {
   return TYPE_IDS.find(t => t.id === id)?.label.split(' — ')[0] ?? `TypeID ${id}`
+}
+
+// ── DNP3 object groups (point types) ─────────────────────────────────────────
+// What a DNP3 master reads from an outstation. `kind` derives the digital/analog
+// classification go104 stores (mirrors internal/dnp3line measValue).
+export const POINT_TYPES = [
+  { value: 'binary',               label: 'Binary Input',         kind: 'digital' },
+  { value: 'double_bit_binary',    label: 'Double-bit Binary',    kind: 'digital' },
+  { value: 'binary_output_status', label: 'Binary Output Status', kind: 'digital' },
+  { value: 'counter',              label: 'Counter',              kind: 'analog'  },
+  { value: 'frozen_counter',       label: 'Frozen Counter',       kind: 'analog'  },
+  { value: 'analog',               label: 'Analog Input',         kind: 'analog'  },
+  { value: 'analog_output_status', label: 'Analog Output Status', kind: 'analog'  },
+] as const
+
+export function pointTypeKind(pt: string | undefined): 'digital' | 'analog' {
+  return POINT_TYPES.find(p => p.value === pt)?.kind ?? 'analog'
+}
+
+export function pointTypeLabel(pt: string | undefined): string {
+  return POINT_TYPES.find(p => p.value === pt)?.label ?? (pt || '—')
 }
 
 export function formatValue(dp: Datapoint): string {
