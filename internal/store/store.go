@@ -44,11 +44,14 @@ type Store interface {
 }
 
 type sqliteStore struct {
-	db      *sql.DB
-	mu      sync.Mutex // single-writer for SQLite
-	dpCache sync.Map   // signalID int64 → *models.Datapoint (latest value)
-	hist    sync.Map   // signalID int64 → *histBuf (recent trend, in-memory only)
-	histCap int        // ring capacity per signal
+	db       *sql.DB
+	mu       sync.Mutex    // single-writer for SQLite (config + periodic snapshot)
+	dpCache  sync.Map      // signalID int64 → *models.Datapoint (latest value, RTDB)
+	dirty    sync.Map      // signalID int64 → struct{} (changed since last snapshot)
+	hist     sync.Map      // signalID int64 → *histBuf (recent trend, in-memory only)
+	histCap  int           // ring capacity per signal
+	snapStop chan struct{} // stop signal for the snapshot loop
+	snapDone chan struct{} // closed when the snapshot loop has exited
 }
 
 // New opens (or creates) a SQLite database and runs migrations.
@@ -58,13 +61,17 @@ func New(path string) (Store, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db, histCap: historyPoints()}
+	s := &sqliteStore{
+		db: db, histCap: historyPoints(),
+		snapStop: make(chan struct{}), snapDone: make(chan struct{}),
+	}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	if err := s.loadDPCache(); err != nil {
 		return nil, fmt.Errorf("load cache: %w", err)
 	}
+	go s.snapshotLoop()
 	return s, nil
 }
 
@@ -332,6 +339,7 @@ func (s *sqliteStore) DeleteSignal(id int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.dpCache.Delete(id)
+	s.dirty.Delete(id)
 	s.hist.Delete(id)
 	_, err := s.db.Exec(`DELETE FROM signals WHERE id=?`, id)
 	return err
@@ -339,27 +347,16 @@ func (s *sqliteStore) DeleteSignal(id int64) error {
 
 // --- Datapoints ---
 
+// UpsertDatapoint updates only the in-memory RTDB (dpCache) and marks the signal
+// dirty — it does NOT write SQLite on the hot path. A background snapshot
+// (snapshot.go) persists changed current values in batches so a restart still
+// shows last-known values via loadDPCache. The live UI is fed from dpCache +
+// the WebSocket hub, neither of which needs the per-sample disk write.
 func (s *sqliteStore) UpsertDatapoint(dp *models.Datapoint) error {
-	s.mu.Lock()
-	_, err := s.db.Exec(`INSERT INTO datapoints
-		(signal_id,line_id,ioa,name,signal_type,type_id,unit,value,raw_value,quality,timestamp,received_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(signal_id) DO UPDATE SET
-		line_id=excluded.line_id,ioa=excluded.ioa,name=excluded.name,
-		signal_type=excluded.signal_type,type_id=excluded.type_id,unit=excluded.unit,
-		value=excluded.value,raw_value=excluded.raw_value,quality=excluded.quality,
-		timestamp=excluded.timestamp,received_at=excluded.received_at`,
-		dp.SignalID, dp.LineID, dp.IOA, dp.Name, string(dp.Kind), dp.TypeID, dp.Unit,
-		dp.Value, dp.RawValue, dp.Quality,
-		dp.Timestamp.UTC().Format(time.RFC3339Nano),
-		dp.ReceivedAt.UTC().Format(time.RFC3339Nano),
-	)
-	s.mu.Unlock()
-	if err == nil {
-		clone := *dp
-		s.dpCache.Store(dp.SignalID, &clone)
-	}
-	return err
+	clone := *dp
+	s.dpCache.Store(dp.SignalID, &clone)
+	s.dirty.Store(dp.SignalID, struct{}{})
+	return nil
 }
 
 func (s *sqliteStore) ListDatapoints(lineID int64) ([]models.Datapoint, error) {
@@ -507,6 +504,8 @@ func (s *sqliteStore) DeleteScadaView(id int64) error {
 // not what an edge console's SQLite is for (config + latest value only).
 
 func (s *sqliteStore) Close() error {
+	close(s.snapStop)
+	<-s.snapDone // wait for the final snapshot flush
 	return s.db.Close()
 }
 

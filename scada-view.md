@@ -68,8 +68,11 @@ SCADA Expansion — Detailed Plan
 
   Backend — new endpoint:
   GET /api/signals/{id}/history?from=<unix>&to=<unix>&limit=1000
-  Response: [{ ts: string, value: number, quality: number }]                                                                                                                                                    Store: new table signal_history(signal_id, ts REAL, value REAL, quality INT). Writer: in
-  line_worker.go, every incoming datapoint INSERTs a row. Add retention policy: DELETE WHERE ts <        now-7d on each insert (or scheduled).
+  Response: [{ ts: number, value: number, quality: number }]   Store: recent history lives in an
+  IN-MEMORY per-signal ring buffer (internal/store/history_mem.go), NOT SQLite — per-sample history
+  writes were the single-writer bottleneck. Each datapoint appends O(1) to the ring; QueryHistory
+  serves the recent window. Bounded by GO104_HISTORY_POINTS (default 2000/signal, 0=off);
+  non-persistent (lost on restart). Long-term archival is the upstream historian's job (Sparkplug/Timescale).
 
   Frontend — HistoryModal.vue:
 
@@ -101,7 +104,9 @@ SCADA Expansion — Detailed Plan
   - Add menu item: { icon: '📈', label: 'View history…', action: () => openHistoryModal(el.signal_id) }  - Modal Teleports to <body>, backdrop blur
                                                                                                          ---                                                                                                    4. File / Component Changes
                                                                                                          Backend (Go):
-  internal/store/store.go          + CreateHistoryTable, InsertDatapoint, QueryHistory
+  internal/store/store.go          UpsertDatapoint → in-memory RTDB (dpCache) + dirty mark, no hot-path write
+  internal/store/snapshot.go       batched periodic persist of current values (GO104_SNAPSHOT_SEC, default 30s)
+  internal/store/history_mem.go    in-memory history ring (InsertHistory/QueryHistory), QueryHistory handler
   internal/api/scada.go            + getSignalHistory handler
   internal/api/router.go           + GET /api/signals/{id}/history                                       internal/iec104/line_worker.go   + insert row on every decoded datapoint
   internal/models/models.go        + HistoryPoint struct
@@ -150,7 +155,7 @@ SCADA Expansion — Detailed Plan
   │                │                                   │ overhead                                 │
   ├────────────────┼───────────────────────────────────┼──────────────────────────────────────────┤
   │ Line routing   │ Orthogonal (2-segment L)          │ Cleaner for P&ID; diagonal as fallback   │      ├────────────────┼───────────────────────────────────┼──────────────────────────────────────────┤
-  │ History        │ 7 days rolling                    │ SQLite size control; configurable env    │      │ retention      │                                   │ var                                      │
+  │ History        │ In-memory ring (recent window),   │ Per-sample SQLite history was the        │      │ retention      │ default 2000 pts/signal           │ single-writer bottleneck; archival is    │      │                │ (GO104_HISTORY_POINTS)            │ the upstream historian's job             │
   ├────────────────┼───────────────────────────────────┼──────────────────────────────────────────┤      │ Port model     │ Declarative per-kind              │ Recompute on move = no stale coords      │
   ├────────────────┼───────────────────────────────────┼──────────────────────────────────────────┤      │ Layout column  │ Merge {elements,lines} into       │ Atomic save, backward compatible         │
   │                │ single JSON                       │ (default lines=[])                       │      └────────────────┴───────────────────────────────────┴──────────────────────────────────────────┘
