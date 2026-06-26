@@ -123,7 +123,7 @@ type Command struct {
 	Select bool    `json:"select"`
 }
 
-// HistoryPoint is one time-series sample stored in signal_history.
+// HistoryPoint is one time-series sample from a signal's in-memory trend ring.
 type HistoryPoint struct {
 	TS      float64 `json:"ts"` // Unix epoch seconds (float64 for sub-second precision)
 	Value   float64 `json:"value"`

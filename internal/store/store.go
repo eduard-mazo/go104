@@ -46,7 +46,9 @@ type Store interface {
 type sqliteStore struct {
 	db      *sql.DB
 	mu      sync.Mutex // single-writer for SQLite
-	dpCache sync.Map   // signalID int64 → *models.Datapoint
+	dpCache sync.Map   // signalID int64 → *models.Datapoint (latest value)
+	hist    sync.Map   // signalID int64 → *histBuf (recent trend, in-memory only)
+	histCap int        // ring capacity per signal
 }
 
 // New opens (or creates) a SQLite database and runs migrations.
@@ -56,7 +58,7 @@ func New(path string) (Store, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db}
+	s := &sqliteStore{db: db, histCap: historyPoints()}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -121,14 +123,9 @@ func (s *sqliteStore) migrate() error {
 			created_at TEXT    NOT NULL DEFAULT (datetime('now')),
 			updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
 		)`,
-		`CREATE TABLE IF NOT EXISTS signal_history (
-			signal_id INTEGER NOT NULL,
-			ts        REAL    NOT NULL,
-			value     REAL    NOT NULL,
-			quality   INTEGER NOT NULL DEFAULT 0,
-			PRIMARY KEY (signal_id, ts)
-		) WITHOUT ROWID`,
-		`CREATE INDEX IF NOT EXISTS idx_history_signal_ts ON signal_history(signal_id, ts)`,
+		// signal_history is intentionally NOT a table — recent trend history lives
+		// in an in-memory ring buffer (see history_mem.go). SQLite holds only
+		// config + the latest value per signal, not the per-sample stream.
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -335,6 +332,7 @@ func (s *sqliteStore) DeleteSignal(id int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.dpCache.Delete(id)
+	s.hist.Delete(id)
 	_, err := s.db.Exec(`DELETE FROM signals WHERE id=?`, id)
 	return err
 }
@@ -503,48 +501,10 @@ func (s *sqliteStore) DeleteScadaView(id int64) error {
 }
 
 // --- Signal history ---
-
-const historyRetentionSec = 7 * 24 * 3600 // 7 days
-
-func (s *sqliteStore) InsertHistory(signalID int64, ts float64, value float64, quality uint8) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cutoff := ts - historyRetentionSec
-	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO signal_history (signal_id,ts,value,quality) VALUES (?,?,?,?);
-		 DELETE FROM signal_history WHERE signal_id=? AND ts < ?`,
-		signalID, ts, value, int(quality),
-		signalID, cutoff,
-	)
-	return err
-}
-
-func (s *sqliteStore) QueryHistory(signalID int64, from, to float64, limit int) ([]models.HistoryPoint, error) {
-	if limit <= 0 || limit > 5000 {
-		limit = 2000
-	}
-	rows, err := s.db.Query(
-		`SELECT ts,value,quality FROM signal_history
-		 WHERE signal_id=? AND ts>=? AND ts<=?
-		 ORDER BY ts ASC LIMIT ?`,
-		signalID, from, to, limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var pts []models.HistoryPoint
-	for rows.Next() {
-		var p models.HistoryPoint
-		var q int
-		if err := rows.Scan(&p.TS, &p.Value, &q); err != nil {
-			return nil, err
-		}
-		p.Quality = uint8(q)
-		pts = append(pts, p)
-	}
-	return pts, rows.Err()
-}
+// NOTE: InsertHistory / QueryHistory are implemented in history_mem.go against
+// an in-memory ring buffer. They deliberately do NOT touch SQLite — per-sample
+// history was the single-writer bottleneck (≈60% of ingest write cost) and is
+// not what an edge console's SQLite is for (config + latest value only).
 
 func (s *sqliteStore) Close() error {
 	return s.db.Close()
